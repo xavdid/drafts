@@ -1,0 +1,13 @@
+require.config({ paths: { vs: '../node_modules/monaco-editor/min/vs' } })
+require(['vs/editor/editor.main'], function() {
+
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(`
+<%= typings %>
+  `)
+
+  monaco.languages.typescript.javascriptDefaults.addExtraLib(`
+<%= es6 %>
+  `)
+
+  <%= js %>
+})

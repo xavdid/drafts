@@ -1,0 +1,33 @@
+{
+  "name": "drafts",
+  "version": "0.0.0",
+  "description": "",
+  "main": "lib/index.js",
+  "scripts": {
+    "dev": "serve . -p 1234",
+    "watch": "nodemon ./bin/build --watch index.js --watch definitions/drafts.d.ts",
+    "build": "./bin/build"
+  },
+  "keywords": [],
+  "author": {
+    "name": "David Brownman",
+    "email": "beamneocube@gmail.com",
+    "url": "https://davidbrownman.com"
+  },
+  "license": "ISC",
+  "prettier": {
+    "semi": false,
+    "singleQuote": true
+  },
+  "dependencies": {
+    "monaco-editor": "0.16.2",
+    "nodemon": "1.18.10"
+  },
+  "devDependencies": {
+    "@types/lodash": "4.14.123",
+    "gh-pages": "2.0.1",
+    "lodash": "4.17.11",
+    "serve": "10.1.2",
+    "typescript": "3.3.3333"
+  }
+}
