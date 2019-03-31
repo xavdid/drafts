@@ -4,7 +4,8 @@
   "description": "",
   "main": "lib/index.js",
   "scripts": {
-    "dev": "serve . -p 1234",
+    "dev": "concurrently \"yarn server\" \"yarn watch\"",
+    "server": "serve . -p 1234",
     "watch": "nodemon ./bin/build --watch index.js --watch definitions/drafts.d.ts",
     "build": "./bin/build",
     "fullbuild": "./bin/generateDefs && yarn build"
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@types/lodash": "4.14.123",
+    "concurrently": "4.1.0",
     "gh-pages": "2.0.1",
     "lodash": "4.17.11",
     "nodemon": "1.18.10",
