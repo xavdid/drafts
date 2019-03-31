@@ -1,6 +1,14 @@
-require.config({ paths: { vs: '../node_modules/monaco-editor/min/vs' } })
-require(['vs/editor/editor.main'], function() {
-
+require.config({
+  paths: {
+    vs: '../node_modules/monaco-editor/min/vs',
+    prettier: '../node_modules/prettier'
+  }
+})
+require([
+  'vs/editor/editor.main',
+  'prettier/standalone',
+  'prettier/parser-babylon'
+], function(monaco, prettier, ...plugins) {
   monaco.languages.typescript.javascriptDefaults.addExtraLib(`
 <%= typings %>
   `)
@@ -11,3 +19,4 @@ require(['vs/editor/editor.main'], function() {
 
   <%= js %>
 })
+

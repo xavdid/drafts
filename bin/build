@@ -4,26 +4,22 @@ const { readFileSync, writeFileSync } = require('fs')
 const { template } = require('lodash')
 const { resolve } = require('path')
 
-const jsTemplate = readFileSync(
-  resolve(__dirname, '../final.js.template'),
-  'utf-8'
+const fp = p => resolve(__dirname, p)
+
+const jsTemplate = readFileSync(fp('../final.js.template'), 'utf-8')
+const typings = readFileSync(fp('../definitions/drafts.d.ts'), 'utf-8')
+const es6 = readFileSync(fp('../definitions/es6.d.ts'), 'utf-8').replace(
+  /`/g,
+  '\\`'
 )
-const typings = readFileSync(
-  resolve(__dirname, '../definitions/drafts.d.ts'),
-  'utf-8'
-)
-const es6 = readFileSync(
-  resolve(__dirname, '../definitions/es6.d.ts'),
-  'utf-8'
-).replace(/`/g, '\\`')
-const js = readFileSync(resolve(__dirname, '../index.js'), 'utf-8').replace(
+const js = readFileSync(fp('../index.js'), 'utf-8').replace(
   "const monaco = require('monaco-editor')",
   ''
-) // don't keep the require in the output
+) // don't keep the require in the output, but use it for writing that code
 
 const output = template(jsTemplate)({
   typings,
   js,
   es6
 })
-writeFileSync('../final.js', output)
+writeFileSync(fp('../final.js'), output)
