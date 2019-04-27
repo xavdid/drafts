@@ -196,6 +196,33 @@ declare class App {
 declare const app: App
 
 /**
+ * Helper methods to encode and decode [Base64](https://en.wikipedia.org/wiki/Base64) strings.
+ *
+ * https://reference.getdrafts.com/objects/Base64.html
+ */
+declare class Base64 {
+  /**
+   * Base64 encode a string.
+   * @param data the string to encode
+   */
+  static encode(data: string): string
+
+  /**
+   * Base64 decode a string.
+   * @param data the string to decode
+   */
+  static decode(data: string): string
+}
+
+declare class Box {
+  readonly lastError: string | undefined
+
+  read(path: string): string
+  write(path: string, content: string, overwrite?: boolean): boolean
+}
+declare const box: Box
+
+/**
  * The Draft object represents a single draft. When an action is run, the current draft is available as the global variable “draft”. Scripts can also create new drafts, access and set values, and update the draft to persist changes.
  *
  * https://reference.getdrafts.com/objects/Draft.html
