@@ -1,5 +1,3 @@
-import { read, write } from 'fs-extra'
-
 /**
  * In addition to being able to lookup an action using the find method, a single global action object is created and available in scripts to inquire about the current action and control flow.
  *
@@ -15,7 +13,7 @@ declare class Action {
   /**
    * The name of the action.
    */
-  name: string
+  readonly name: string
 }
 declare const action: Action
 
@@ -39,7 +37,7 @@ declare class ActionGroup {
   /**
    * The name of the action group.
    */
-  name: string
+  readonly name: string
 }
 declare const actionGroup: ActionGroup
 
@@ -481,7 +479,137 @@ declare const device: Device
  * https://reference.getdrafts.com/objects/Draft.html
  */
 declare class Draft {
-  // FIXME: THIS
+  /**
+   * Unique identifier for the draft.
+   */
+  readonly uuid: string
+  content: string
+
+  /**
+   * The title. This is generally the first line of the draft.
+   */
+  readonly title: string
+
+  /**
+   * The preferred language grammar (syntax) to use for the draft.
+   */
+  languageGrammar:
+    | 'Plain Text'
+    | 'Markdown'
+    | 'Taskpaper'
+    | 'JavaScript'
+    | 'Simple List'
+    | 'MultiMarkdown'
+    | 'GitHub Markdown'
+
+  /**
+   * The index location in the string of the beginning of the last text selection.
+   */
+  readonly selectionStart: number
+
+  /**
+   * The length of the last text selection.
+   */
+  readonly selectionLength: number
+
+  /**
+   * Array of string tag names assigned to the draft.
+   */
+  readonly tags: string[]
+
+  /**
+   * True if draft is in the archive, false if it is in inbox.
+   */
+  isArchived: boolean
+
+  /**
+   * True if draft is in the trash, false if it is not.
+   */
+  isTrashed: boolean
+
+  /**
+   * Use to access or set flagged status.
+   */
+  isFlagged: boolean
+
+  readonly createdAt: Date
+  createdLongitude: number
+  createdLatitude: number
+  readonly modifiedAt: Date
+  modifiedLongitude: number
+  modifiedLatitude: number
+
+  /**
+   * URL which can be used to open the draft.
+   */
+  readonly permalink: string
+
+  /**
+   * Save changes made to the draft to the database. _This must be called to save changes made during an action’s execution._
+   */
+  update(): void
+
+  addTag(tag: string): void
+
+  /**
+   * remove a tag if it is assigned to the draft.
+   */
+  removeTag(tag: string): void
+
+  /**
+   * returns boolean indicating whether the tag is currently assigned to the draft.
+   */
+  hasTag(tag: string): boolean
+
+  /**
+   * runs the passed template string through the template engine to evaluate tags (like `[[title]]`, `[[body]]`).
+   */
+  processTemplate(template: string): string
+
+  /**
+   * set a custom tag value for use in templates. For example, calling `setTemplateTag("mytag", "mytext")` will create a tag `[[mytag]]`, which subsequent action step templates can use.
+   */
+  setTemplateTag(tagName: string, value: string): void
+
+  /**
+   * get the current value of a custom template tag.
+   */
+  getTemplateTag(tagName: string): string
+
+  /**
+   * create a new draft object. This is an in-memory object only, unless “update()” is called to save the draft.
+   */
+  create(): Draft
+
+  /**
+   * find an existing draft based on UUID.
+   */
+  find(uuid: string): Draft
+
+  /**
+   * perform a search for drafts and return an array of matching draft objects.
+   * @param queryString Search string, as you would type in the search box in the draft list. Will find only drafts with a matching string in their contents. Use empty string (`""`) not to filter.
+   * @param filter Filter by one of the allowed values
+   * @param tags Results will only include drafts with one or more of these tags assigned.
+   * @param omitTags Results will omit drafts with any of these tags assigned.
+   * @param sort
+   * @param sortDescending If `true`, sort descending. Defaults to `false`.
+   * @param sortFlaggedToTop If `true`, sort flagged drafts to beginning. Defaults to `false`.
+   */
+  query(
+    queryString: string,
+    filter: 'inbox' | 'archive' | 'flagged' | 'trash' | 'all',
+    tags: string[],
+    omitTags: string[],
+    sort: 'created' | 'modified' | 'accessed',
+    sortDescending: boolean,
+    sortFlaggedToTop: boolean
+  ): Draft[]
+
+  /**
+   * Returns array of recently used tags. Helpful for building prompts to select tags.
+   */
+  recentTags(): string[]
 }
 
 /**
@@ -775,6 +903,419 @@ declare class GoogleDrive {
    * @param identifier used to identify a GoogleDrive account. Typically this can be omitted if you only work with one GoogleDrive account in Drafts.
    */
   static create(identifier?: string): GoogleDrive
+}
+
+/**
+ * Display of HTML Preview window, the same as the HTMLPreview action step. Returns true if user closed preview with the “Continue” button, false if the user cancelled.
+ *
+ * https://reference.getdrafts.com/objects/HTMLPreview.html
+ */
+declare class HTMLPreview {
+  /**
+   * Open HTML Preview window displaying the HTML string passed.
+   * @param html The HTML content to display. Should be complete HTML document.
+   */
+  show(html: string): boolean
+
+  static create(): HTMLPreview
+}
+
+/**
+ * The HTTP and HTTPResponse objects are used to run synchronous HTTP requests to communicate with APIs, or just read pages from the web. A full set of custom settings can be passed, and all HTTP methods (GET, POST, PUT, DELETE, etc.) are supported.
+ *
+ * https://reference.getdrafts.com/objects/HTTP.html
+ */
+declare class HTTP {
+  /**
+   * @param settings an object with the following properties:
+   * * url [string, required]: The HTTP URL to make the request.
+   * * method [string, required]: The HTTP method, like “GET”, “POST”, etc.
+   * * headers [object, optional]: An object contain key-values to be added as custom headers in the request.
+   * * parameters [object, optional]: Query parameters to merge with the url. Query parameters can also be part of the original url value.
+   * * data [object, optional]: An object containing data to be encoded into the HTTP body of the request.
+   * * encoding [string, optional]: Possible values:
+   * * json: Default. Encode data using JSON in request body.
+   * * form: Use traditional application/x-www-form-urlencoded parameter encoding for request body.
+   * * username [string, optional]: A username to encode for Basic Authentication.
+   * * password [string, optional]: A password to encode for Basic Authentication.
+   */
+  request(settings: {
+    url: string
+    method: string
+    headers?: { [x: string]: string }
+    parameters?: { [x: string]: string }
+    data?: { [x: string]: string }
+    encoding?: 'json' | 'form'
+    username?: string
+    password?: string
+  }): HTTPResponse
+
+  static create(): HTTP
+}
+
+/**
+ * HTTPResponse objects are returned by calls to HTTP methods.
+ *
+ * https://reference.getdrafts.com/objects/HTTPResponse
+.html
+ */
+declare class HTTPResponse {
+  /**
+   * true/false for whether the request was completed successfully.
+   */
+  success: boolean
+
+  /**
+   * The HTTP status code (like 200, 301, etc.) returned.
+   */
+  statusCode: number
+
+  /**
+   * The raw data returned. Typically an object or array of objects, but exact content varies by server response.
+   */
+  responseData: any
+
+  /**
+   * The data returned as a string format.
+   */
+  responseText: string
+
+  /**
+   * Some responses return additional data that is placed in this field.
+   */
+  otherData: string | undefined
+
+  /**
+   * If an error occurred, a description of the type of error.
+   */
+  error: string | undefined
+}
+
+/**
+ * The Mail object can be used to create and send mail messages, similar to those created by a “Mail” action step.
+ *
+ * https://reference.getdrafts.com/objects/Mail.html
+ */
+declare class Mail {
+  /**
+   * Array of email addresses to use as `To:` recipients.
+   */
+  toRecipients: string[]
+
+  /**
+   * Array of email addresses to use as `CC:` recipients.
+   */
+  ccRecipients: string[]
+
+  /**
+   * Array of email addresses to use as `BCC:` recipients.
+   */
+  bccRecipients: string[]
+
+  /**
+   * Subject line
+   */
+  subject: string
+
+  /**
+   * Body text of the mail message. Can be plain text or HTML if the `isBodyHTML` property is set to `true`.
+   */
+  body: string
+
+  /**
+   * whether to treat the body string and plain text or HTML. When set to `true`, the `body` property should be set to full valid HTML.
+   */
+  isBodyHTML: boolean
+
+  /**
+   * If `true`, the mail will be sent in the background using a web service rather than via Mail.app - but will come from `drafts5@drafts5.agiletortoise.com`. Defaults to `false`.
+   */
+  sendInBackground: boolean
+
+  /**
+   * indicates if the message object has already been sent.
+   */
+  isSent: boolean
+
+  /**
+   * One of the following values:
+   * * created: Initial value before `send()` has been called.
+   * * sent: The message was sent successfully.
+   * * savedAsDraft: On iOS, the user exited the Mail.app window saving as draft, but not sending.
+   * * mailUnavailable: On iOS, Mail.app services were not available.
+   * * userCancelled: The user cancelled the Mail.app window without sending.
+   * * invalid: Mail object is invalid. Common cause if of this is sendInBackground being true, but no recipient configured.
+   * * serviceError: Background mail service returned an error.
+   * * unknownError: An unknown error occurred.
+   */
+  status:
+    | 'created'
+    | 'sent'
+    | 'savedAsDraft'
+    | 'mailUnavailable'
+    | 'userCancelled'
+    | 'invalid'
+    | 'serviceError'
+    | 'unknownError'
+
+  /**
+   * Send the mail message. This will open the `Mail.app` sending window. Returns `true` if the message was sent successfully or `false` if not - if, for example, the user cancelled the mail window.
+   */
+  send(): boolean
+
+  static create(): Mail
+}
+
+/**
+ * The Message object can be used to create and send mail iMessages, similar to those created by a “Message” action step.
+ *
+ * https://reference.getdrafts.com/objects/Message.html
+ */
+declare class Message {
+  /**
+   * Array of phone numbers and email addresses to use as `To:` recipients.
+   */
+  toRecipients: string[]
+  /**
+   * Subject line. Only used if subject is enabled in Messages settings on the device.
+   */
+  subject: string
+  /**
+   * Body text of the mail message.
+   */
+  body: string
+  /**
+   * true/false flag indicated if the message object has already been sent.
+   */
+  isSent: boolean
+
+  /**
+   * One of the following strings
+   * * created: Initial value before `send()` has been called.
+   * * sent: The message was sent successfully.
+   * * messagesUnavailable: On iOS, Mail.app services were not available.
+   * * userCancelled: The user cancelled the Mail.app window without sending.
+   * * unknownError: An unknown error occurred.
+   */
+  status:
+    | 'created'
+    | 'sent'
+    | 'messagesUnavailable'
+    | 'userCancelled'
+    | 'unknownError'
+
+  /**
+   * Send the message. This will open the `Messages.app` sending window. Returns `true` if the message was sent successfully or `false` if not - if, for example, the user cancelled the message window.
+   */
+  send(): boolean
+
+  static create(): Message
+}
+
+/**
+ * Drafts includes a full version of the MultiMarkdown 6 engine to render Markdown text to HTML and other supported formats. For details on the meaning of the various options, refer to [MultiMarkdown documentation](https://github.com/fletcher/MultiMarkdown-6).
+ *
+ * https://reference.getdrafts.com/objects/MultiMarkdown.html
+ */
+declare class MultiMarkdown {
+  /**
+   * Takes Markdown string passed and processes it with MultiMarkdown based on the properties and format selections on the object.
+   */
+  render(markdownStr: string): string
+
+  /**
+   * Specify output format. Valid values are:
+   * * `html`: HTML. This is the default Markdown output.
+   * * `epub`: ePub
+   * * `latex`: LaTeX
+   * * `beamer`
+   * * `memoir`
+   * * `odt`: Open document format
+   * * `mmd`
+   */
+  format: 'html' | 'epub' | 'latex' | 'beamer' | 'memoir' | 'odt' | 'mmd'
+
+  /**
+   * defaults to `false`
+   */
+  markdownCompatibilityMode: boolean
+  /**
+   * defaults to `false`
+   */
+  completeDocument: boolean
+  /**
+   * defaults to `false`
+   */
+  snippetOnly: boolean
+  /**
+   * defaults to `true`
+   */
+  smartQuotesEnabled: boolean
+  /**
+   * defaults to `true`
+   */
+  footnotesEnabled: boolean
+  /**
+   * defaults to `true`
+   */
+  noLabels: boolean
+  /**
+   * defaults to `true`
+   */
+  processHTML: boolean
+  /**
+   * defaults to `false`
+   */
+  noMetadata: boolean
+  /**
+   * defaults to `false`
+   */
+  obfuscate: boolean
+  /**
+   * defaults to `false`
+   */
+  criticMarkup: boolean
+  /**
+   * defaults to `false`
+   */
+  criticMarkupAccept: boolean
+  /**
+   * defaults to `false`
+   */
+  criticMarkupReject: boolean
+  /**
+   * defaults to `false`
+   */
+  randomFootnotes: boolean
+  /**
+   * defaults to `false`
+   */
+  transclude: boolean
+
+  static create(): MultiMarkdown
+}
+
+/**
+ * The MustacheTemplate object support rendering of templates using the [Mustache](https://en.wikipedia.org/wiki/Mustache_%28template_system%29) template style.
+ *
+ * Mustache templates offer advanced features for iterating over items, creating conditional blocks of text and more. This is still a bit of an experimental feature, please send feedback if you are finding edge cases or are interested in more functionality in this area.
+ *
+ * The object can be used in one of two ways, by passing a specific template as a string and rendering it, or by passing a path to a subdirectory of the `iCloud Drive/Drafts/Library/Templates` folder which can contain more than one Mustache style templates (with file extension `.mustache`), and then rendering them. The late method has the advantage of supporting the use of partial templates in the same folder.
+ *
+ * For details on using Mustache templates, we recommend reviewing [tutorials](https://www.bersling.com/2017/09/22/the-ultimate-mustache-tutorial/).
+ *
+ * ### About Passing Data to Templates
+ *
+ * When rendering Mustache templates, you pass the template itself and a data object which contains the values available to insert. The data object should be a Javascript object with keys and values. Values can be basic data types (numbers, strings, dates) and also arrays or nested objects which can be iterated using conventions of the Mustache syntax.
+ *
+ * https://reference.getdrafts.com/objects/MustacheTemplate.html
+ */
+declare class MustacheTemplate {
+  /**
+   * Use in combination with `createWithTemplate(template)` to render the template using the data passsed.
+   * @param data A Javascript object with the values to use when rendering the template. The object can have nested sub-objects.
+   */
+  render(data: { [x: string]: any }): string
+
+  /**
+   * Use in combination with `createWithPath(path)` to render the template using the data passsed.
+   * @param templateName The name of a template file in the directory passed to create the MustacheTemplate object. Do not include the “.mustache” file extension. For example, if you have a “Document.mustache” file in the directory, pass templateName “Document”.
+   * @param data  A Javascript object with the values to use when rendering the template. The object can have nested sub-objects.
+   */
+  renderTemplate(templateName: string, data: any): string
+
+  /**
+   * Determines how the Mustache engine renders output. Valid options:
+   * * `text`: Render the output as plain text, do not do additional encoding of entities.
+   * * `html`: Render output as escaped HTML with entities converted for use in HTML.
+   */
+  contentType: 'text' | 'html'
+
+  /**
+   * Create a new object with a template
+   * @param template a valid Mustache template string
+   */
+  createWithTemplate(template: string): MustacheTemplate
+
+  /**
+   * Create a new object configured to point to a directory of Mustache template files in iCloud Drive. When using this method, other Mustache template located in the same directory will be available to be used as partials in the rendering process.
+   * @param path Relative path to a directory of Mustache template files (with .mustache file extension) located in `iCloud Drive/Drafts/Library/Templates`. For example to refer to templates in the directory `iCloud Drive/Drafts/Library/Templates/My Mustache Templates/`, pass `My Mustache Templates/` to this method.
+   */
+  createWithPath(path: string): MustacheTemplate
+}
+
+/**
+ * OneDrive objects can be used to work with files in a OneDrive account.
+ *
+ * https://reference.getdrafts.com/objects/OneDrive.html
+ */
+declare class OneDrive {
+  /**
+   * If a function fails, this property will contain the last error as a string message, otherwise it will be undefined.
+   */
+  lastError: string | undefined
+
+  /**
+   * Reads the contents of the file at the path as a string. Returns undefined value if the file does not exist or could not be read. Paths should begin with a `/` and be relative to the root directory of your OneDrive.
+   */
+  read(path: string): string
+
+  /**
+   * Write the contents of the file at the path. Returns true if successful, false if the file could not be written successfully. This will override existing files!
+   * @param path Paths should begin with a `/` and be relative to the root directory of your OneDrive
+   * @param content Text to place in the file
+   * @param overwrite If `false`, an existing file will not be overwritten
+   */
+  write(path: string, content: string, overwrite?: boolean): boolean
+
+  /**
+   *
+   * @param identifier Optional identifier for OneDrive account to use. This string is an arbitrary value, but we recommend using the email address you wish to associate with the script. Each unique identifier will be associated with its own [Credential](https://getdrafts.com/settings/credentials).
+   */
+  static create(identifier?: string): OneDrive
+}
+
+/**
+ * The OutlookMessage object can be used to create and send mail messages through Outlook.com integrated accounts, similar to those created by a [Outlook action step](https://getdrafts.com/actions/steps/outlook). Creating and sending these messages happens in the background, with no user interface, so messages must be complete with recipients before calling `send()`. Sending is done via the [Microsoft Graph API](https://developer.microsoft.com/en-us/graph). Outlooks accounts are authenticated when used for the first time using OAuth - to use more than one account, call create with different identifier parameters.
+ *
+ * https://reference.getdrafts.com/objects/OutlookMessage.html
+ */
+declare class OutlookMessage {
+  /**
+   * Array of email addresses to use as `To:` recipients. Each entry can be a valid email address, or a name and email in the format `Name<email>`.
+   */
+  toRecipients: string[]
+  /**
+   * Array of email addresses to use as `CC:` recipients. Each entry can be a valid email address, or a name and email in the format `Name<email>`.
+   */
+  ccRecipients: string[]
+  /**
+   * Array of email addresses to use as `BCC:` recipients. Each entry can be a valid email address, or a name and email in the format `Name<email>`.
+   */
+  bccRecipients: string[]
+
+  subject: string
+
+  /**
+   * Body text of the mail message. Can be plain text or HTML if the `isBodyHTML` property is set to `true`.
+   */
+  body: string
+
+  /**
+   * whether to treat the body string and plain text or HTML. When set to `true`, the `body` property should be set to full valid HTML.
+   */
+  isBodyHTML: boolean
+
+  /**
+   * Send the mail message via the Microsoft Graph API.
+   */
+  send(): boolean
+
+  /**
+   * create a new object.
+   * @param identifier notes which for Outlook account to use. This string is an arbitrary value, but we recommend using the email address you wish to associate with the script. Each unique identifier will be associated with its own [Credential](https://getdrafts.com/settings/credentials).
+   */
+  static create(identifier?: string): OutlookMessage
 }
 
 /**
