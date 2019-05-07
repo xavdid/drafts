@@ -611,6 +611,7 @@ declare class Draft {
    */
   recentTags(): string[]
 }
+declare const draft: Draft
 
 /**
  * Event object represent individual calendar events.
