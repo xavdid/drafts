@@ -8,7 +8,6 @@ monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
 })
 
 const editor = monaco.editor.create(document.getElementById('editor'), {
-  // value: ['function x() {', '\tconsole.log("Hello world!");', '}'].join('\n'),
   language: 'javascript',
   minimap: {
     enabled: false
@@ -24,8 +23,10 @@ document.getElementById('copy').onclick = () => {
   document.execCommand('copy')
 
   editor.setPosition(p) // clears selection
+  const t = document.getElementById('copied-text')
+  t.style.opacity = '1'
 
-  console.log('copied')
+  setTimeout(() => (t.style.opacity = '0'), 2000)
 }
 
 document.getElementById('pretty').onclick = () => {
@@ -33,6 +34,4 @@ document.getElementById('pretty').onclick = () => {
   const res = prettier.format(text, { parser: 'babel', plugins })
 
   editor.getModel().setValue(res)
-
-  console.log('prettier')
 }

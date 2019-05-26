@@ -23,17 +23,12 @@
   },
   "dependencies": {
     "monaco-editor": "0.16.2",
-    "prettier": "1.16.4",
-    "typedoc": "0.14.2"
+    "prettier": "1.16.4"
   },
   "devDependencies": {
-    "@types/cheerio": "0.22.11",
-    "@types/got": "9.4.1",
     "@types/lodash": "4.14.123",
-    "cheerio": "1.0.0-rc.2",
     "concurrently": "4.1.0",
     "gh-pages": "2.0.1",
-    "got": "9.6.0",
     "lodash": "4.17.11",
     "nodemon": "1.18.10",
     "serve": "10.1.2",

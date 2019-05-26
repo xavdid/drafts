@@ -1,29 +1,88 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>browser-amd-editor</title>
+    <title>Drafts 5 Editor</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
     <style>
+      a {
+        color: grey;
+      }
+      a:visited {
+        color: grey;
+      }
+
+      h2,
+      .controls {
+        padding-bottom: 20px;
+        font-family: 'Courier New', Courier, monospace;
+      }
+      .btn {
+        padding: 5px 10px;
+        border: 1px solid black;
+        border-radius: 3px;
+      }
+
       #editor {
         width: 100%;
         height: 600px;
         border: 1px solid gray;
       }
       @media only screen and (min-width: 600px) {
+        .main {
+          padding-left: 10%;
+        }
         #editor {
           width: 600px;
         }
       }
+
+      .footer {
+        max-width: 600px;
+        padding-top: 5px;
+        font-family: 'Courier New', Courier, monospace;
+      }
+
+      #copied-text {
+        display: inline;
+        opacity: 0;
+        transition: 1s opacity;
+      }
     </style>
   </head>
   <body>
-    <h2>Drafts 5 Editor</h2>
-    <a href="#" id="copy">Copy</a>
-    |
-    <a href="#" id="pretty">Prettier</a>
-    <div id="editor"></div>
+    <div class="main">
+      <div class="title">
+        <h2>Drafts 5 Editor</h2>
+      </div>
+      <div class="controls">
+        <a href="#" class="btn" id="copy">Copy</a>
+        |
+        <a href="#" class="btn" id="pretty">Prettier</a>
+        <div id="copied-text">
+          Copied!
+        </div>
+      </div>
+      <div class="editor-wrapper">
+        <div id="editor"></div>
+      </div>
+      <div class="footer">
+        Made by
+        <a href="https://davidbrownman.com" target="_blank" rel="noopener">
+          David Brownman</a
+        >. Source is
+        <a
+          href="https://github.com/xavdid/drafts"
+          target="_blank"
+          rel="noopener"
+          >open</a
+        >. Not affiliated with
+        <a href="https://getdrafts.com/" target="_blank" rel="noopener"
+          >Drafts</a
+        >, I just like the app.
+      </div>
+    </div>
 
     <!-- <script src="node_modules/monaco-editor/min/vs/loader.js"></script> -->
     <!-- <script src="https://unpkg.com/prettier@1.13.0/standalone.js"></script> -->
