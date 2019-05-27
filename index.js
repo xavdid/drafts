@@ -1,6 +1,8 @@
 /* global prettier, plugins */
 const monaco = require('monaco-editor')
 
+// MAIN //
+
 monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
   noLib: true,
   allowNonTsExtensions: true,
@@ -16,6 +18,9 @@ const editor = monaco.editor.create(document.getElementById('editor'), {
 })
 
 editor.getModel().updateOptions({ tabSize: 2 })
+editor.focus()
+
+//////////
 
 document.getElementById('copy').onclick = () => {
   editor.focus()
