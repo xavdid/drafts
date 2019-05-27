@@ -9,6 +9,7 @@
     "watch": "nodemon ./bin/build --watch index.js --watch definitions/drafts.d.ts",
     "build": "./bin/build",
     "fullbuild": "./bin/generateES6Defs && yarn build",
+    "predeploy": "yarn build",
     "deploy": "NODE_DEBUG=gh-pages ./bin/deploy"
   },
   "keywords": [],
