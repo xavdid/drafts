@@ -12,7 +12,6 @@
     "predeploy": "yarn build",
     "deploy": "NODE_DEBUG=gh-pages ./bin/deploy"
   },
-  "keywords": [],
   "author": {
     "name": "David Brownman",
     "email": "beamneocube@gmail.com",

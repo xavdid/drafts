@@ -18,7 +18,9 @@ const editor = monaco.editor.create(document.getElementById('editor'), {
 editor.getModel().updateOptions({ tabSize: 2 })
 
 document.getElementById('copy').onclick = () => {
+  editor.focus()
   const p = editor.getPosition()
+
   editor.setSelection(editor.getModel().getFullModelRange())
   document.execCommand('copy')
 
