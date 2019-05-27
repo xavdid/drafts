@@ -1,7 +1,7 @@
 require.config({
   paths: {
-    vs: '../node_modules/monaco-editor/min/vs',
-    prettier: '../node_modules/prettier'
+    vs: 'node_modules/monaco-editor/min/vs',
+    prettier: 'node_modules/prettier'
   }
 })
 require([
