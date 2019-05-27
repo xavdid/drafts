@@ -8,7 +8,8 @@
     "server": "serve . -p 1234",
     "watch": "nodemon ./bin/build --watch index.js --watch definitions/drafts.d.ts",
     "build": "./bin/build",
-    "fullbuild": "./bin/generateDefs && yarn build"
+    "fullbuild": "./bin/generateES6Defs && yarn build",
+    "deploy": "NODE_DEBUG=gh-pages ./bin/deploy"
   },
   "keywords": [],
   "author": {
@@ -26,12 +27,14 @@
     "prettier": "1.16.4"
   },
   "devDependencies": {
+    "@types/gh-pages": "2.0.0",
+    "@types/got": "9.4.4",
     "@types/lodash": "4.14.123",
     "concurrently": "4.1.0",
     "gh-pages": "2.0.1",
+    "got": "9.6.0",
     "lodash": "4.17.11",
     "nodemon": "1.18.10",
-    "serve": "10.1.2",
-    "typescript": "3.3.3333"
+    "serve": "10.1.2"
   }
 }

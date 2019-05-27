@@ -11,15 +11,19 @@ const typings = readFileSync(fp('../definitions/drafts.d.ts'), 'utf-8').replace(
   /`/g,
   '\\`'
 )
+// generated defs from the typescript install
 const es6 = readFileSync(fp('../definitions/es6.d.ts'), 'utf-8').replace(
   /`/g,
   '\\`'
 )
+
+// the js that runs at runtime
 const js = readFileSync(fp('../index.js'), 'utf-8').replace(
   "const monaco = require('monaco-editor')",
   ''
 ) // don't keep the require in the output, but use it for writing that code
 
+// put it all together
 const output = template(jsTemplate)({
   typings,
   js,
