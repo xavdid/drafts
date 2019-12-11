@@ -1,6 +1,6 @@
 # drafts
 
-Monaco editor for writing actions in [Drafts 5](https://getdrafts.com/). There are standalone [typescript definitions](https://github.com/xavdid/drafts/blob/master/definitions/drafts.d.ts) included if you want to write code separately too.
+Monaco editor for writing actions in [Drafts 5](https://getdrafts.com/). Definitions are put together using the [typescript definitions](https://github.com/agiletortoise/drafts-script-reference/tree/master/src) that power the [docs](https://scripting.getdrafts.com/).
 
 ## Motivation
 

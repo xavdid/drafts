@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "concurrently \"yarn server\" \"yarn watch\"",
     "server": "serve . -p 1234",
-    "watch": "nodemon ./bin/build --watch index.js --watch definitions/drafts.d.ts",
+    "watch": "nodemon ./bin/build --watch index.js",
     "build": "./bin/build",
-    "fullbuild": "./bin/generateES6Defs && yarn build",
-    "predeploy": "yarn build",
+    "fetchDraftsDefs": "./bin/generateDraftsDefs",
+    "fetchAllDefs": "./bin/generateES6Defs && yarn fetchDraftsDefs",
+    "predeploy": "yarn fetchDraftsDefs && yarn build",
     "deploy": "NODE_DEBUG=gh-pages ./bin/deploy"
   },
   "author": {
@@ -31,6 +32,7 @@
     "@types/got": "9.4.4",
     "@types/lodash": "4.14.123",
     "concurrently": "4.1.0",
+    "dotenv": "8.2.0",
     "gh-pages": "2.0.1",
     "got": "9.6.0",
     "lodash": "4.17.11",

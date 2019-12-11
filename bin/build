@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+// grab all definitions and build a single rolled up final.js
+
 const { readFileSync, writeFileSync } = require('fs')
 const { template } = require('lodash')
 const { resolve } = require('path')
