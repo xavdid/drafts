@@ -7,6 +7,7 @@ const vscodeFilePath = p => `node_modules/monaco-editor/min/vs/${p}`
 ghpages.publish('.', {
   src: [
     'index.html',
+    'the.css',
     'final.js',
     // all the requests that it makes locally
     vscodeFilePath('base/worker/workerMain.js'),
