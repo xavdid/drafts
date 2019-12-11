@@ -82,5 +82,5 @@ typings/
 lib
 
 final.js
-definitions/es6.d.ts
-definitions/drafts.d.ts # maintained separately
+# es6 and drafts are both compiled now
+definitions
