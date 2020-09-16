@@ -7,27 +7,27 @@ const dotenv = require('dotenv')
 dotenv.config()
 
 const fetchDefs = async () => {
-  const fileList = (await got(
+  const fileList = await got(
     'https://api.github.com/repos/agiletortoise/drafts-script-reference/contents/src',
     {
-      json: true,
       headers: {
-        Authorization: `token ${process.env.GITHUB_API_TOKEN}`
-      }
+        Authorization: `token ${process.env.GITHUB_API_TOKEN}`,
+      },
     }
-  )).body
+  ).json()
+
   const fileContentsResponses = await Promise.all(
     fileList
       .filter(({ name }) => name.includes('.d.ts'))
       .map(({ url }) =>
         got(url, {
           headers: {
-            Authorization: `token ${process.env.GITHUB_API_TOKEN}`
-          }
+            Authorization: `token ${process.env.GITHUB_API_TOKEN}`,
+          },
         })
       )
   )
-  const fileContent = fileContentsResponses.map(response => {
+  const fileContent = fileContentsResponses.map((response) => {
     const { content } = JSON.parse(response.body)
     return Buffer.from(content, 'base64').toString()
   })
@@ -37,7 +37,7 @@ const fetchDefs = async () => {
   )
 }
 
-fetchDefs().catch(e => {
+fetchDefs().catch((e) => {
   console.error(`error fetching def @ ${e.url}: ${e.body || e}\n\n${e.stack}`)
   process.exitCode = 1
 })

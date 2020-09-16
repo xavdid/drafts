@@ -24,19 +24,19 @@
     "singleQuote": true
   },
   "dependencies": {
-    "monaco-editor": "0.16.2",
-    "prettier": "1.16.4"
+    "monaco-editor": "0.20.0",
+    "prettier": "2.1.2"
   },
   "devDependencies": {
-    "@types/gh-pages": "2.0.0",
-    "@types/got": "9.4.4",
-    "@types/lodash": "4.14.123",
-    "concurrently": "4.1.0",
+    "@types/gh-pages": "3.0.0",
+    "@types/got": "9.6.11",
+    "@types/lodash": "4.14.161",
+    "concurrently": "5.3.0",
     "dotenv": "8.2.0",
-    "gh-pages": "2.0.1",
-    "got": "9.6.0",
-    "lodash": "4.17.13",
-    "nodemon": "1.18.10",
-    "serve": "10.1.2"
+    "gh-pages": "3.1.0",
+    "got": "11.6.2",
+    "lodash": "4.17.20",
+    "nodemon": "2.0.4",
+    "serve": "11.3.2"
   }
 }
