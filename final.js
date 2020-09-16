@@ -34,8 +34,26 @@ declare class Action {
 
     /**
      * The display name of the action as displayed in the action list.
+     * @category Identification
      */
     readonly name: string
+
+    /**
+     * URL which can be used to install this Action in another installation of Drafts. Useful for sharing and backups.
+     * @category Identification
+     */
+    readonly installURL: string
+
+    /**
+    * The unique identifier of the action group.
+    * @category Identification
+    */
+    readonly uuid: string
+
+    /**
+    * If true, the action is a separator.
+    */
+    readonly isSeparator: boolean
 }
 /**
  * The current running action.
@@ -71,6 +89,16 @@ declare class ActionGroup {
      * The display name of the action group.
      */
     readonly name: string
+
+    /**
+    * The unique identifier of the action group.
+    */
+    readonly uuid: string
+
+    /**
+    * The actions contained in the action group.
+    */
+    readonly actions: Action[]
 }
 
 
@@ -113,6 +141,11 @@ declare class Alarm {
  */
 declare class App {
     /**
+     * Returns true if app has an active Drafts Pro subscription.
+    */
+    readonly isPro: boolean
+
+    /**
      * Version number of current installation of Drafts.
      */
     readonly version: string
@@ -143,7 +176,7 @@ declare class App {
     isIdleDisabled: boolean
 
     /**
-     * opens URL passed using iOS. Returns true if URL was opened, false if the URL was invalid or no available app can open the URL on the device.
+     * Request system opens the URL passed. Returns true if URL was opened, false if the URL was invalid or no available app can open the URL on the device.
      * @param url url to open
      * @param useSafari whether to use the Safari View Controller (true) or default browser (false).
      */
@@ -158,8 +191,9 @@ declare class App {
 
     /**
      * Open draft selection interface and wait for user to select a draft. Returns the select draft object, or \`undefined\` if user cancelled.
+     * @param workspace If provided, the workspace will define the default filtering, display, and sort options for the selection window.
      */
-    selectDraft(): Draft | undefined
+    selectDraft(workspace?: Workspace): Draft | undefined
 
     // UI FUNCTIONS
 
@@ -174,6 +208,22 @@ declare class App {
     hideDraftList(): void
 
     /**
+     * Open quick search window, optionally providing a initial query value.
+    */
+    showQuickSearch(initialQuery?: string): void
+
+    /**
+    * Open the "Get Info" view for a draft. If no draft is passed, the current active draft in the editor will be used.
+    */
+    showDraftInfo(draft?: Draft): void
+
+    /**
+    * If able, open the requested draft in a new window. This method only functions on iPad and Mac. The ability to open new windows is not available on iPhone.
+    * @returns \`true\` if successful. \`false\` if unable to open a new window (as on iPhone).
+    */
+    openInNewWindow(draft: Draft): boolean
+
+    /**
      * Open action list side bar.
      */
     showActionList(): void
@@ -184,9 +234,14 @@ declare class App {
     hideActionList(): void
 
     /**
-     * Apply the Workspace as if it was selected in draft list.
+     * Apply the Workspace as if it was selected in draft list. Calling this function with no arguments will clear filters and apply the default workspace.
      **/
-    applyWorkspace(workspace: Workspace): boolean
+    applyWorkspace(workspace?: Workspace): boolean
+
+    /**
+     * Returns a workspace object configured like the workspace currently loaded in the draft list of the active window. Useful when creating logic which reacts contextually to the workspace loaded.
+     */
+    currentWorkspace: Workspace
 
     /**
      * Load the ActionGroup in the action list side bar.
@@ -338,6 +393,11 @@ declare class Box {
      * Creates a new Box object. Identifier is a optional string value used to identify a Box.com account. Typically this can be omitted if you only work with one Box.com account in Drafts.
      */
     static create(identifier?: string): Box
+
+    /**
+    * Create new instance.
+    */
+    constructor(identifier?: string)
 }
 
 
@@ -469,6 +529,11 @@ declare class CallbackURL {
     baseURL: string
 
     /**
+     * The current URL. This is provided as a debugging property, and will output the URL including the baseURL property with any configured parameters added. This property will differ from the actual URL opened when calling \`open()\` in that it will not contain the \`x-success\`, \`x-error\` and \`x-cancel\` parameters which are added dynamically at the time \`open()\` is called. 
+     */
+    url: string
+
+    /**
      * If true, the script will pause and wait for the \`x-success\`, \`x-error\` or \`x-cancel\` response from the app being targeted by the URL. If false, execution of the script/action will continue immediately and no response/results will be available.
      */
     waitForResponse: boolean
@@ -509,6 +574,12 @@ declare class CallbackURL {
      * Creates a new CallbackURL object.
      */
     static create(): CallbackURL
+
+    /**
+     * Create new instance.
+     */
+    constructor()
+
 }
 
 
@@ -550,6 +621,16 @@ declare class Context {
      * If [Callback URL](https://getdrafts.com/actions/steps/callbackurl) or [Run Shortcut](https://getdrafts.com/actions/steps/runshortcut) action steps using the "Wait for response" option have been run in steps before the script step in an action, and the target app returned to Drafts using an x-success callback, this object will contain an array of objects with the parsed query parameters included in those responses, in the order they were received. 
      */
     callbackResponses: { [x: string]: any }
+
+    /**
+    * If AppleScripts run using the AppleScript object return values, they will be converted to JavaScript object and stored in this array. See [AppleScript docs](https://docs.getdrafts.com/docs/automation/applescript) for details.
+     */
+    appleScriptResponses: { [x: string]: any }
+
+    /**
+    * If [HTML Preview](https://docs.getdrafts.com/docs/actions/html-forms) makes calls to \`Drafts.send(key, value)\` those values are stored in this object by \`key\`.
+    */
+    previewValues: { string: any }
 
     /**
      * Tell the context to cancel the action at the end of the script execution. If called, at the end of the script the action will be stopped. No subsequent action steps in the action will run, and the action still stop silently - no notification banners, sounds, etc. If a message is included it will be added to the action log to explain the cancellation.
@@ -605,11 +686,15 @@ declare const context: Context
 declare class Credential {
     /**
      * Create a credential object with the specified identifier and description. Identifiers should be unique, such that any two calls from different actions with the same identifier will return the same credentials
+     * @param identifier Unique identifier for the credentials
+     * @param description Optional description
      */
-    static create(identifier: string, description: string): Credential
+    static create(identifier: string, description?: string): Credential
 
     /**
      * Create credential already configured with username and password fields.
+     * @param identifier Unique identifier for the credentials
+     * @param description Optional description
      */
     static createWithUsernamePassword(
         identifier: string,
@@ -618,12 +703,21 @@ declare class Credential {
 
     /**
      * Create credential already configured with host url, username and password fields.
+     * @param identifier Unique identifier for the credentials
+     * @param description Optional description
      */
     static createWithHostUsernamePassword(
         identifier: string,
         description: string
     ): Credential
 
+    /**
+     * Create new instance.
+     * @param identifier Unique identifier for the credentials
+     * @param description Optional description
+    */
+    constructor(identifier: string, description?: string)
+    
     /**
      * Call this function after configuring, but before using host, username or password properties of a credential. If the credential object has not be previous authorized, the user will be prompted to enter their credentials before continuing. If the user has previously been prompt, this method will load previously provided information.
      */
@@ -688,7 +782,7 @@ declare class Credential {
  *     // do something only on Mac
  * }
  * else {
- *     // do somethign only on iOS
+ *     // do something only on iOS
  * }
  * \`\`\`
  */
@@ -719,6 +813,7 @@ declare class Device {
 declare const device: Device
 
 
+type draftFolderTab = 'inbox' | 'flagged' | 'archive' | 'trash' | 'all'
 /**
  * # Draft 
  * 
@@ -728,8 +823,9 @@ declare const device: Device
  * 
  * \`\`\`javascript
  * // create a new draft, assign content and save it
- * let d = Draft.create();
+ * let d = new Draft();
  * d.content = "My new draft";
+ * d.addTag("personal");
  * d.update();
  * \`\`\`
  * 
@@ -742,19 +838,34 @@ declare const device: Device
  */
 declare class Draft {
     /**
-     * Unique identifier for the draft.
+     * Create new instance.
+     */
+    constructor()
+
+    /**
+     * Unique identifier.
      */
     readonly uuid: string
 
     /**
-    * The full text content of the draft.
+    * The full text content.
     */
     content: string
 
     /**
-     * The title. This is generally the first line of the draft.
+     * The first line.
      */
     readonly title: string
+
+    /**
+    * Generally, the first line of the draft, but cleaned up as it would be displayed in the draft list in the user interface, removing Markdown header characters, etc.
+    */
+    readonly displayTitle: string
+
+    /**
+    * The lines of content separated into an array on \`\n\` line feeds. This is a convenience method an equivalent to \`content.split('\n');\`
+    */
+    readonly lines: [string]
 
     /**
      * The preferred language grammar (syntax) to use for the draft. Can be any valid installed language grammar.
@@ -779,9 +890,10 @@ declare class Draft {
     readonly selectionLength: number
 
     /**
-     * Array of string tag names assigned to the draft.
+     * Array of string tag names assigned.
+     * @category Tag
      */
-    readonly tags: string[]
+    readonly Tag: string[]
 
     /**
      * Is the draft current in the archive. If \`false\`, the draft is in the inbox.
@@ -798,52 +910,96 @@ declare class Draft {
      */
     isFlagged: boolean
 
-    readonly createdAt: Date
-    readonly createdLongitude: number
-    readonly createdLatitude: number
-    readonly modifiedAt: Date
-    readonly modifiedLongitude: number
-    readonly modifiedLatitude: number
+    /**
+     * Date the draft was created. This property is generally maintained by Drafts automatically and is it not recommended it be set directly unless needed to maintain information from an external source when importing.
+     * @category Date
+     */
+    createdAt: Date
+    /**
+     * Numeric longitude where the draft was created. This value will be \`0\` if no location information was available.
+     * @category Location
+     */
+    createdLongitude: number
+    /**
+     * Numeric latitude where the draft was created. This value will be \`0\` if no location information was available.
+     * @category Location
+     */
+    createdLatitude: number
+    /**
+     * Date the draft was last modified. This property is generally maintained by Drafts automatically and is it not recommended it be set directly unless needed to maintain information from an external source when importing.
+     * @category Date
+     */
+    modifiedAt: Date
+    /**
+    * Numeric longitude where the draft was last modified. This value will be \`0\` if no location information was available.
+    * @category Location
+    */
+    modifiedLongitude: number
+    /**
+    * Numeric longitude where the draft was last modified. This value will be \`0\` if no location information was available.
+    * @category Location
+    */
+    modifiedLatitude: number
 
     /**
-     * URL which can be used to open the draft.
+     * URL which can be used to open the draft. URLs are cross-platform, but specific to an individual user's drafts datastore.
      */
     readonly permalink: string
 
     /**
-     * Save changes made to the draft to the database. _This must be called to save changes made during an action’s execution._
+     * Save changes made to the draft to the database. _\`update()\` must be called to save changes made to a draft._
      */
     update(): void
 
     /**
     * Assign a tag
+    * @category Tag
     */
     addTag(tag: string): void
 
     /**
      * Remove a tag if it is assigned to the draft.
+     * @category Tag
      */
     removeTag(tag: string): void
 
     /**
      * Check whether a tag is currently assigned to the draft.
+     * @category Tag
      */
     hasTag(tag: string): boolean
 
     /**
      * Runs the template string through the template engine to evaluate tags (like \`[[title]]\`, \`[[body]]\`).
+     * @category Template
      */
     processTemplate(template: string): string
 
     /**
      * Set a custom template tag value for use in templates. For example, calling \`setTemplateTag("mytag", "mytext")\` will create a tag \`[[mytag]]\`, which subsequent action steps in the same action can use in their templates.
+     * @category Template
      */
     setTemplateTag(tagName: string, value: string): void
 
     /**
      * Get the current value of a custom template tag.
+     * @category Template
      */
     getTemplateTag(tagName: string): string
+
+    /**
+     * Append text to the end of the draft's \`content\`. This is a convenience function.
+     * @param text The text to append
+     * @param separator An optional separator string to use between content and added text. Defaults to a single line feed.
+     */
+    append(text: string, separator?: string): void
+
+    /**
+     * Prepend text to the beginning of the draft's \`content\`. This is a convenience function.
+     * @param text The text to prepend
+     * @param separator An optional separator string to use between content and added text. Defaults to a single line feed.
+     */
+    prepend(text: string, separator?: string): void
 
     /**
      * Array of versions representing the entire saved version history for this draft.
@@ -862,6 +1018,7 @@ declare class Draft {
 
     /**
      * Find an existing draft based on UUID.
+     * @category Querying
      */
     static find(uuid: string): Draft
 
@@ -874,6 +1031,7 @@ declare class Draft {
      * @param sort
      * @param sortDescending If \`true\`, sort descending. Defaults to \`false\`.
      * @param sortFlaggedToTop If \`true\`, sort flagged drafts to beginning. Defaults to \`false\`.
+     * @category Querying
      */
     static query(
         queryString: string,
@@ -885,8 +1043,15 @@ declare class Draft {
         sortFlaggedToTop: boolean
     ): Draft[]
 
+    /**  
+    * Search for drafts containing the title string in the first line of their content. This mimics the logic used by the \`/open?title=Title\` URL scheme to locate drafts by title when triggering embedded [cross-links](https://docs.getdrafts.com/docs/drafts/cross-linking).
+    * @category Querying
+    */
+    static queryByTitle(title: string): Draft[]
+
     /**
      * Return array of recently used tags. Helpful for building prompts to select tags.
+     * @category Tag
      */
     static recentTags(): string[]
 }
@@ -914,8 +1079,8 @@ interface DropboxRequestSettings {
     parameters?: { [x: string]: string },
     /** An object containing data to be encoded into the HTTP body of the request. */
     data?: { [x: string]: string },
-    /** An object containing the parameters to encode in the \`dropbox-api-request\` header, per API documentation. Drafts will take care of properly ASCII escaping values. Required only for \`contentUploadRequest\` and \`contentDownloadRequest\` functions. */
-    'dropbox-api-request'?: { [x: string]: string },
+    /** An object containing the parameters to encode in the \`dropbox-api-args\` header, per API documentation. Drafts will take care of properly ASCII escaping values. Required only for \`contentUploadRequest\` and \`contentDownloadRequest\` functions. */
+    'dropbox-api-args'?: { [x: string]: string },
 }
 
 /**
@@ -1005,6 +1170,10 @@ declare class Dropbox {
      */
     static create(identifier?: string): Dropbox
     
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 
@@ -1012,6 +1181,31 @@ declare class Dropbox {
  * An array of numbers containing the location (index in string), and length (number of characters) of a text selection.
  */
 type selectionRange = Array<number>
+/**
+ * An object describing a navigation location, as defined by the syntax definition in use in the editor
+ */
+type navigationMarker = {
+    /**
+     * The start location of the range of text representing the marker.
+     */
+    location: number,
+    /**
+    * The number of characters in the range.
+    */
+    length: number,
+    /** 
+     * Prefix text for the marker. Example: \`H1\`, \`H2\` in Markdown
+     */
+    prefix: string,
+    /** 
+     * Label text for the marker.
+     */
+    label: string,
+    /** 
+     * Indentation level of the marker.
+     */
+    level: number,
+}
 /**
  * # Editor 
  * 
@@ -1035,9 +1229,19 @@ declare class Editor {
     linkModeEnabled: boolean
 
     /**
+     * Access or set current typewriter scrolling status.
+     */
+    typewriterScrollingEnabled: boolean
+
+    /**
      * Is editor current focused for editing.
      */
     isActive: boolean
+
+    /**
+     * Array of recent drafts. This is the same list as used in the navigation features of the editor, and is in reverse order, so that the first index in the array is the previous draft loaded in the editor.
+     */
+    recentDrafts: [Draft]
 
     // FUNCTIONS
     /**
@@ -1135,6 +1339,11 @@ declare class Editor {
     getSelectedRange(): selectionRange
 
     /**
+    * Expand the range provided to the nearest beginning and end of the lines it encompasses.
+    */
+    getLineRange(location: number, length: number): selectionRange
+
+    /**
     * Update the text selection in the editor by passing the start location and the length of the new selection.
     */
     setSelectedRange(location: number, length: number): void
@@ -1148,6 +1357,20 @@ declare class Editor {
     * Replace the text in the passed range with new text.
     */
     setTextInRange(location: number, length: number, text: string): void
+
+    /**
+    * Array of navigation markers in the text. Navigation markers are defined by the syntax definition in use in the editor, and are used in the [Navigation](https://docs.getdrafts.com/docs/editor/navigation) feature. 
+    */
+    navigationMarkers: [navigationMarker]
+
+    /**
+    * The next navigation marker in the editor, relative to the character location. This is a convenience method to assist in navigating by marker.
+    */
+    navigationMarkerAfter(location: number): navigationMarker
+    /**
+    * The previous navigation marker in the editor, relative to the character location. This is a convenience method to assist in navigating by marker.
+    */
+    navigationMarkerBefore(location: number): navigationMarker
 }
 /**
  * The active editor
@@ -1249,7 +1472,7 @@ declare class Event {
 /**
  * # FileManager
  * 
- * FileManager objects can be used to read from or write to files in either the local Drafts app Documents directory (as visible in the \`Files.app\`), or iCloud Drive (inside the \`Drafts\` folder).
+ * FileManager objects can be used to read from or write to files in either the local Drafts app Documents directory, or iCloud Drive (inside the \`Drafts\` folder).Note that local files are not visible on iOS, and are only available for reading and writing via scripting.
  *
  * ### Example
  * 
@@ -1274,14 +1497,24 @@ declare class FileManager {
     lastError: string | undefined
 
     /**
-     * Convenience method to create local file manager.
+     * Convenience method to create local file manager. Note that local files are not visible on iOS in the Files app and are only available through the use of scripting.
      */
-    createLocal(): FileManager
+    static createLocal(): FileManager
 
     /**
      * Convenience method to create iCloud file manager.
      */
-    createCloud(): FileManager
+    static createCloud(): FileManager
+
+    /**
+    * The base local URL (\`file:///\` format) to the directory used by this FileManager.
+    */
+    readonly baseURL: string
+
+    /**
+    * The base POSIX-style path to the directory used by this FileManager.
+    */
+    readonly basePath: string
 
     /**
      * Reads the contents of the file at the path. Returns \`undefined\` value if the file does not exist or could not be read.
@@ -1293,6 +1526,17 @@ declare class FileManager {
      * Write the contents of the file at the path. Returns true if successful, false if the file could not be written successfully. This will override existing files!
      */
     writeString(path: string, content: string): boolean
+
+    /**
+     * Reads the contents of a JSON formatted file at the path. Returns \`undefined\` value if the file does not exist or could not be read and parsed as JSON. Contents could be an object, array of objects, etc., depending on the content of the JSON file.
+     * @param path should begin with a \`/\` and be relative to the root directory of the FileManager.
+    */
+    readJSON(path: string): object | undefined
+
+    /**
+     * Write the contents to the path in JSON format. Returns true if successful, false if the file could not be written successfully. This will override existing files!
+     */
+    writeJSON(path: string, content: object): boolean
 
     /**
      * List files and directories at the specified path. Array of full path will be returned.
@@ -1321,10 +1565,62 @@ declare class FileManager {
     copyItem(fromPath: string, toPath: string, overwrite?: boolean): boolean
 
     /**
+     * Get creation date of file at path.
+     * @param path
+     * @category Attribute
+     */
+    getCreationDate(path: string): Date
+
+    /**
+     * Get modification date of file at path.
+     * @param path
+     * @category Attribute
+     */
+    getModificationDate(path: string): Date
+
+    /**
+     * Set creation date of file at path. Returns true if successful, false if not.
+     * @param path
+     * @param date
+     * @category Attribute
+     */
+    setCreationDate(path: string, date: Date): boolean
+
+    /**
+     * Set modification date of file at path. Returns true if successful, false if not.
+    * @param path
+    * @param date
+    * @category Attribute
+    */
+    setModificationDate(path: string, date: Date): boolean
+
+    /**
+     * Set tags on the file at path.
+     * @param path
+     * @param tags
+     * @category Attribute
+     */
+    setTags(path: string, tags: string[]): boolean
+
+    /**
+     * Get tags on file at path.
+    * @param path
+    * @param date
+    * @category Attribute
+    */
+    getTags(path: string): string[]
+
+    /**
      * Creates a new FileManager object.
      * @param isLocal If \`true\`, the \`FileManager\` will be using the to the local Drafts app documents directory as its root directory, as it appears in the "On my …" area in the \`Files.app\`. If \`false\`, it will use the Drafts5 iCloud folder as its root directory.
      */
     static create(isLocal: boolean): FileManager
+
+    /**
+     * Create new instance.
+     * @param isLocal If \`true\`, the \`FileManager\` will be using the to the local Drafts app documents directory as its root directory, as it appears in the "On my …" area in the \`Files.app\`. If \`false\`, it will use the Drafts5 iCloud folder as its root directory.
+     */
+    constructor(isLocal: boolean)
 }
 
 
@@ -1382,6 +1678,12 @@ declare class GitHubMarkdown {
      * create a new object.
      */
     static create(): GitHubMarkdown
+
+    /**
+     * Create new instance.
+     */
+    constructor()
+
 }
 
 
@@ -1459,6 +1761,11 @@ declare class GmailMessage {
      * @param identifier notes which for Gmail account to use. This string is an arbitrary value, but we recommend using the email address you wish to associate with the script. Each unique identifier will be associated with its own [Credential](https://getdrafts.com/settings/credentials).
      */
     static create(identifier?: string): GmailMessage
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)    
 }
 
 
@@ -1530,6 +1837,11 @@ declare class GoogleDrive {
      * @param identifier used to identify a GoogleDrive account. Typically this can be omitted if you only work with one GoogleDrive account in Drafts.
      */
     static create(identifier?: string): GoogleDrive
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 
@@ -1573,17 +1885,35 @@ declare class HTML {
  * let html = "<html><body>My Document</body></html>"
  * 
  * let preview = HTMLPreview.create();
- * preview.show(html);
+ * if (preview.show(html)) {
+ *   // continue button was pressed
+ * }
+ * else {
+ *   // cancel button was pressed
+ * }
  * \`\`\`
  */
 declare class HTMLPreview {
+    /**
+     * Hides the toolbars and \`Cancel\` / \`Continue\` buttons in the  preview window. For use only when combined with JavaScript flow control in the HTML preview. See [docs]() for details.
+     */
+    hideInterface: boolean
+
     /**
      * Open HTML Preview window displaying the HTML string passed.
      * @param html The HTML content to display. Should be complete HTML document.
      */
     show(html: string): boolean
 
+    /**
+     * Create new instance.
+     */
     static create(): HTMLPreview
+
+    /**
+     * Create new instance.
+     */
+    constructor()
 }
 
 
@@ -1647,10 +1977,16 @@ declare class HTTP {
         /** A password to encode for Basic Authentication. */
         password?: string
     }): HTTPResponse
+
     /**
      * Instantiate an \`HTTP\` object.
      */
     static create(): HTTP
+
+    /**
+     * Create new instance.
+     */
+    constructor()    
 }
 
 /**
@@ -1777,11 +2113,84 @@ declare class Mail {
      * Send the mail message. This will open the \`Mail.app\` sending window. Returns \`true\` if the message was sent successfully or \`false\` if not - if, for example, the user cancelled the mail window.
      */
     send(): boolean
+
     /**
      * Create \`Mail\` object
      */
     static create(): Mail
+
+    /**
+     * Create new instance.
+     */
+    constructor()
 }
+
+/**
+ * # Medium
+ * 
+ * Script integration with [Medium.com](http://medium.com/). This object handles OAuth authentication and request signing. The entire [Medium REST API](https://github.com/Medium/medium-api-docs) can be used with the \`request\` method, and convenience methods are provided for common API endpoints to get user information, list publications and post.
+ * 
+ * If an API calls fails, typically the result will be an \`undefined\` value, and the \`lastError\` property will contains error detail information for troubleshooting.
+ *
+ */
+declare class Medium {
+    /**
+     * If a function success, this property will contain the last response returned by Medium. The JSON returned by Medium will be parsed to an object and placed in this property. Refer to [Medium API documentation](https://github.com/Medium/medium-api-docs) for details on the contents of this object based on call made.
+     */
+    lastResponse: any
+
+    /**
+     * If a function fails, this property will contain the last error as a string message, otherwise it will be \`undefined\`.
+     */
+    lastError?: string
+
+    // Convenience
+    /**
+     * Get User information for current authenticated user. This will include the \`id\` property needed for other calls.
+     */
+    getUser(): object
+    /**
+     * Get list of publications for current authenticated user.
+     */
+    listPublications(userId: string): object[]
+    /**
+     * Create a post in the user's Medium stories. See [API docs](https://github.com/Medium/medium-api-docs) for details on what should be included in the options.
+     * @param userId 
+     * @param options 
+     */
+    createPost(userId: string, options: object): object
+
+    // FUNCTIONS
+
+    /**
+     * Execute a request against the Medium API. For successful requests, the HTTPResponse object will contain an object or array or objects decoded from the JSON returned by Medium as appropriate to the request made. Refer to Medium API documentation for details about the expected parameters and responses. Drafts will handle wrapping the request in the appropriate OAuth authentication flow.
+     * @param settings an object configuring the request.
+     */
+    request(settings: {
+        /** The full URL to the endpoint in the [Medium REST API](https://github.com/Medium/medium-api-docs). */
+        url: string
+        /** The HTTP method, like "GET", "POST", etc. */
+        method: string
+        /** An object contain key-values to be added as custom headers in the request. There is no need to provide authorization headers, Drafts will add those. */
+        headers?: { [x: string]: string }
+        /** An object containing key-values to be added to the request as URL parameters. */
+        parameters?: { [x: string]: string }
+        /** A JavaScript object containing data to be encoded into the HTTP body of the request. */
+        data?: { [x: string]: string }
+    }): HTTPResponse
+
+    /**
+     * Creates a new Medium object.
+     * @param identifier Optional string value used to identify a Medium account. Typically this can be omitted if you only work with one Medium account in Drafts. Each unique identifier used for Medium accounts will share credentials - across both action steps and scripts.
+     */
+    static create(identifier: string)
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
+}
+
 
 /**
  * # Message
@@ -1840,6 +2249,11 @@ declare class Message {
      * Instantiate \`Message\` object
      */
     static create(): Message
+
+    /**
+     * Create new instance.
+     */
+    constructor()
 }
 
 /**
@@ -1935,6 +2349,11 @@ declare class MultiMarkdown {
 
     /** Create object */
     static create(): MultiMarkdown
+
+    /**
+     * Create new instance.
+     */
+    constructor()
 }
 
 /**
@@ -2075,6 +2494,11 @@ declare class OneDrive {
      * @param identifier Optional identifier for OneDrive account to use. This string is an arbitrary value, but we recommend using the email address you wish to associate with the script. Each unique identifier will be associated with its own [Credential](https://getdrafts.com/settings/credentials).
      */
     static create(identifier?: string): OneDrive
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 
@@ -2135,6 +2559,11 @@ declare class OutlookMessage {
      * @param identifier notes which for Outlook account to use. This string is an arbitrary value, but we recommend using the email address you wish to associate with the script. Each unique identifier will be associated with its own [Credential](https://getdrafts.com/settings/credentials).
      */
     static create(identifier?: string): OutlookMessage
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 
@@ -2194,25 +2623,33 @@ type capitalizationTypes = 'none' | 'sentences' | 'words'
  *
  */
 declare class Prompt {
+    /**
+     * Short title.
+     * @category Display
+     */
     title: string
 
     /**
      * A longer message explaining the purpose of the dialog, if needed.
+     * @category Display
      */
     message: string
 
     /**
      * If true, a "Cancel" button will be included in the dialog. Defaults to \`true\`. If the user selects the cancel button, the \`show()\` method will return \`false\`. If \`false\`, no cancel button will be displayed and the user must select one of the button name options.
+     * @category Display
      */
     isCancellable: boolean
 
     /**
      * After the \`show()\` method is called, this property will contain values from any fields added to the prompt. The dictionary keys will be the names of the fields as passed in when they were created, and the value will be the current contents of that field. They type of data depends on the type of field.
+     * @category Result
      */
     fieldValues: { [x: string]: any }
 
     /**
      * After the \`show()\` method is called, this property will contain the name of the button selected by the user.
+     * @category Result
      */
     buttonPressed: string
 
@@ -2221,6 +2658,7 @@ declare class Prompt {
      * @param name Identifier for the field.
      * @param label The text of the label.
      * @param options A dictionary of options for configuring the text field.
+     * @category Field
      */
     addLabel(
         name: string,
@@ -2233,17 +2671,27 @@ declare class Prompt {
      * @param name Identifier for the field. This will be used as the key in the \`fieldValues\` dictionary to access the contents of the field after calling \`show()\`.
      * @param label User-friendly text label to place next to the field.
      * @param initialText The initial text contents for the field.
-     * @param options A dictionary of options for configuring the text field. See [the site](https://reference.getdrafts.com/objects/Prompt.html) for full descriptions of the options.
+     * @param options A dictionary of options for configuring the text field. 
+     * @category Field
      */
     addTextField(
         name: string,
         label: string,
         initialText: string, // FIXME: is this optional?
         options?: {
+            /**
+            * Placeholder text to use when field is empty
+            */
             placeholder?: string
+            /**
+            * Should system autocorrect be enabled in field, Default: true
+            */
             autocorrect?: boolean
             autocapitalization?: capitalizationTypes
             keyboard?: keyboardTypes
+            /**
+            * If true, focus this field when prompt is displayed
+            */
             wantsFocus?: boolean
         }
     ): void
@@ -2254,6 +2702,7 @@ declare class Prompt {
      * @param label User-friendly text label to place next to the field.
      * @param initialText The initial text contents for the field.
      * @param options A dictionary of options for configuring the text field. See [the site](https://reference.getdrafts.com/objects/Prompt.html) for full descriptions of the options.
+     * @category Field
      */
     addTextView(
         name: string,
@@ -2261,15 +2710,22 @@ declare class Prompt {
         initialText: string,
         options?: {
             height?: number
+            /**
+            * Should system autocorrect be enabled in field, Default: true
+            */
             autocorrect?: boolean
             autocapitalization?: capitalizationTypes
             keyboard?: keyboardTypes
+            /**
+            * If true, focus this field when prompt is displayed
+            */
             wantsFocus?: boolean
         }
     ): void
 
     /**
      * Same as addTextField, but the input field will be password masked.
+     * @category Field
      */
     addPasswordField(name: string, label: string, initialValue: string): void
 
@@ -2278,6 +2734,7 @@ declare class Prompt {
      * @param name Identifier for the field. This will be used as the key in the \`fieldValues\` dictionary to access the contents of the field after calling \`show()\`.
      * @param label User-friendly text label to place next to the field.
      * @param initialValue indicate if the switch should be on or off when initially displayed.
+     * @category Field
      */
     addSwitch(name: string, label: string, initialValue: boolean): void
 
@@ -2287,6 +2744,7 @@ declare class Prompt {
      * @param label User-friendly text label to place next to the field.
      * @param initialDate The initial date to selected for the field. Minimum and maximum values should be defined in options.
      * @param options A dictionary of options for configuring the text field. See [the site](https://reference.getdrafts.com/objects/Prompt.html) for full descriptions of the options.
+     * @category Field
      */
     addDatePicker(
         name: string,
@@ -2306,6 +2764,7 @@ declare class Prompt {
      * @param label User-friendly text label to place next to the field.
      * @param columns The values to display in the picker. Should be an array containing arrays of string values, each sub-array representing a column in the picker. Example two column picker: \`[["Item 1", "Item 2"],["Column 2 Item 1", "Column 2 Item 2"]]\`
      * @param selectedRows Array of zero-based index values to set the initial selected row in each column.
+     * @category Field
      */
     addPicker(
         name: string,
@@ -2321,6 +2780,7 @@ declare class Prompt {
      * @param values The array of string values that will be available to select.
      * @param selectedValues Array of string values that should be initially selected when the prompt is displayed. All values in this array should match values in the \`values\` array.
      * @param allowMultiple If \`false\`, selecting a value will deselect all other values. If \`true\`, the user may select multiple items.
+     * @category Field
      */
     addSelect(
         name: string,
@@ -2335,6 +2795,7 @@ declare class Prompt {
      * @param name
      * @param value only needed to associate a different value than will be displayed in the button. For example, if you call \`prompt.addButton("First Button", 1)\`, after calling \`prompt.show()\` if that button is pressed, the \`prompt.buttonPressed\` will contain the number value \`1\`.
      * @param isDefault used to specify a single button which will be pinned to the bottom of the prompt and respond to \`cmd + return\` as the default button. If only one button is added to a prompt, it is assumed to be the default.
+     * @category Field
      */
     addButton(name: string, value?: string, isDefault?: boolean): void
 
@@ -2343,7 +2804,79 @@ declare class Prompt {
      */
     show(): boolean
 
+    /**
+     * Create new instance.
+     */
     static create(): Prompt
+
+    /**
+     * Create new instance.
+     */
+    constructor()
+}
+
+type queryDateType = 'relative' | 'absolute'
+type queryDateField = 'created' | 'modified' | 'accessed'
+/**
+ * # QueryDate
+ * 
+ * Represents a dynamic date for use in queries. \`QueryDate\` is used when configuring [[Workspace]] objects \`startDate\` and \`endDate\` properties.
+ * 
+ * QueryDates always specify a date with time components being ignored. If used a the start of a query range, the time will be moved to the beginning of that day. If used at the end of a query range, time will be moved to the end of that day.
+ * 
+ * ### Example: Create Workspace with date range
+ * 
+ * \`\`\`javascript
+ * // create a workspace
+ * let workspace = new Workspace();
+ * 
+ * // create a QueryDate for three days ago
+ * let start = new QueryDate();
+ * start.field = "created"
+ * start.type = "relative"
+ * start.days = -3;
+ * 
+ * // create a QueryDate for specific date
+ * let qDate = new QueryDate();
+ * qDate.field = "modified"
+ * qDate.type = "absolute"
+ * qDate.date = Date.today();
+ * 
+ * // assign to the workspace and apply
+ * workspace.startDate = start; // .endDate also available
+ * app.applyWorkspace(workspace);
+ * \`\`\`
+ */
+declare class QueryDate {
+    /**
+     * The date field to use when querying
+     */
+    field: queryDateField
+
+    /**
+     * The type of date range. "relative" dates use the \`days\` property to add days to the current date when evaluating a query. "absolute" type query dates use the \`date\` property for a specific day.
+     */
+    type: queryDateType
+
+    /**
+     * Integer number of days to when evaluating query dates of "relative". This value can be negative. For example, a "relative" type with "-3" days, will always evaluated to 3 days ago when the query is run.
+     */
+    days: number
+
+    /**
+     * Absolute date to use when evaluating the query dates of "absolute" type.
+     */
+    date: Date
+
+    /**
+     * Create a new instance.
+     */
+    static create(): Workspace
+
+    /**
+     * Create a new instance.
+     */
+    constructor()
 }
 
 /**
@@ -2371,6 +2904,11 @@ declare class Reminder {
     * Due date of the reminder
     */
     dueDate?: Date
+
+    /**
+    * Does the dueDate property include an assigned time. If false, assignments to the \`dueDate\` property will ignore time components, making the reminder due on a specific date without a time assigned.
+    */
+     dueDateIncludesTime: Boolean
 
     /**
      * Integer number representing priority. Assign values matching those Apple uses as follows:
@@ -2420,8 +2958,8 @@ declare class Reminder {
  * ### Examples
  * 
  * \`\`\`javascript
- * var list = ReminderList.findOrCreate("Groceries");
- * var reminder = list.createReminder();
+ * const list = ReminderList.findOrCreate("Groceries");
+ * let reminder = list.createReminder();
  * reminder.title = "Bananas";
  * reminder.notes = "Get slightly green ones."
  * reminder.update();
@@ -2474,6 +3012,40 @@ declare class ReminderList {
      * Returns the system default reminder list configured for new reminders.
      */
     static default(): ReminderList
+}
+
+/**
+ * # Script
+ * 
+ * When running a [Script action step](https://docs.getdrafts.com/docs/actions/steps/advanced.html#script), a single \`script\` object will be in context to reference the currently running script.
+ * 
+ * ### Example
+ * \`\`\`javascript
+ * function sleep(milliseconds) {
+ *   var start = new Date().getTime();
+ *   for (var i = 0; i < 1e7; i++) {
+ *     if ((new Date().getTime() - start) > milliseconds){
+ *       break;
+ *     }
+ *   }
+ * }
+ * async function f() {
+ *   let promise = new Promise((resolve, reject) => {
+ *     sleep(1000);
+ *     resolve("done!")
+ *   });
+ *   let result = await promise; // wait until the promise resolves (*)
+ *   alert(result); // "done!"
+ *   script.complete();
+ * }
+ * f();
+ * \`\`\`
+ */
+declare class Script {
+    /**
+     * Inform Drafts the current script has completed execution. Used in combination with the "Allow asynchronous execution" option of the Script step type. If your script step has the asynchronous option enabled, you *must* call \`script.complete()\` to indicate completion or the script will timeout and fail.
+     */
+    complete()
 }
 
 /**
@@ -2686,9 +3258,10 @@ declare class Todoist {
      * @param text Text to use to create the task. Supports Todoist quick add notation for specifying projects, priority, labels, etc. just as if you were using the Todoist quick add window.
      * @param note Optional text to attach as a comment with the task.
      * @param reminder Optional natural language date specifying for creating a task reminder.
+     * @param options Optional dictionary of additional parameters to include in the request.
      * @returns Object containing respose data from Todoist.
      */
-    quickAdd(text: string, note?: string, reminder?: string): object
+    quickAdd(text: string, note?: string, reminder?: string, options?: object): object
 
     // TASKS
     getTasks(options?: object): object[]
@@ -2745,9 +3318,14 @@ declare class Todoist {
 
     /**
      * Creates a new Todoist object.
-     * @param identifier Optional string value used to identify a Todoist account. Typically this can be omitted if you only work with one Todoist account in Drafts. Each unique identifier used for Twitter accounts will share credentials - across both action steps and scripts.
+     * @param identifier Optional string value used to identify a Todoist account. Typically this can be omitted if you only work with one Todoist account in Drafts. Each unique identifier used for Todoist accounts will share credentials - across both action steps and scripts.
      */
     static create(identifier: string): Todoist
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 
@@ -2800,6 +3378,11 @@ declare class Twitter {
      * Creates a new Twitter object. Identifier is a optional string value used to identify a Twitter account. Typically this can be omitted if you only work with one Twitter account in Drafts. Each unique identifier used for Twitter accounts will share credentials - across both action steps and scripts.
      */
     static create(identifier: string): Twitter
+
+    /**
+     * Create new instance.
+     */
+    constructor(identifier?: string)
 }
 
 /**
@@ -2894,7 +3477,7 @@ declare class WordPress {
     runMethod(methodName: string, parameters: any[]): XMLRPCResponse
 
     /**
-     *
+     * Create new instance
      * @param siteURL This should be the full URL to the home page of the WordPress site. e.g. \`https://mysite.com\` or \`https://mysite.com/blog/\`.
      * @param blogId For most WordPress installations, use \`1\`.
      * @param username Username to login to the WordPress site. Optional if only using runMethod, as credentials will be required directly in parameters for those calls.
@@ -2906,9 +3489,23 @@ declare class WordPress {
         username?: string,
         password?: string
     ): WordPress
+
+    /**
+     * Create new instance
+     * @param siteURL This should be the full URL to the home page of the WordPress site. e.g. \`https://mysite.com\` or \`https://mysite.com/blog/\`.
+     * @param blogId For most WordPress installations, use \`1\`.
+     * @param username Username to login to the WordPress site. Optional if only using runMethod, as credentials will be required directly in parameters for those calls.
+     * @param password Password to login to the WordPress site. Optional if only using runMethod, as credentials will be required directly in parameters for those calls.
+     */
+    constructor(
+        siteURL: string,
+        blogId: string,
+        username?: string,
+        password?: string
+    )
 }
 
-type sortDirections = 'created' | 'modified' | 'accessed' | 'name'
+type sortBy = 'created' | 'modified' | 'accessed' | 'name'
 /**
  * # Workspace
  * 
@@ -2925,58 +3522,105 @@ type sortDirections = 'created' | 'modified' | 'accessed' | 'name'
 declare class Workspace {
     /**
      * The name of the workspace.
+     * @category Identification
      */
     name: string
 
     /**
+     * URL which can be used to install this Workspace in another installation of Drafts. Useful for sharing and backups.
+     * @category Identification
+     */
+    readonly installURL: string
+
+    /**
      * Search string to filter results.
+     * @category Filter
      */
     queryString: string
 
     /**
      * Comma-delimited list tag string like "blue, !green" using "!" to omit a tag.
+     * @category Filter
      */
     tagFilter: string
 
     /**
+     * A [[QueryDate]] specifying a date which all drafts in the workspace must be greater than or equal to.
+     * @category Filter
+     */
+    startDate: QueryDate
+
+    /**
+     * A [[QueryDate]] specifying a date which all drafts in the workspace must be less than or equal to.
+     * @category Filter
+     */
+    endDate: QueryDate
+
+    /**
      * If \`true\`, all (AND) tags in the tag filter must match, if \`false\` match any of the tags (OR)
+     * @category Filter
      */
     tagFilterRequireAll: boolean
 
     /**
      * Show preview of draft body in list.
+     * @category Display
      */
     showPreview: boolean
 
     /**
      * Show draft tags in list.
+     * @category Display
      */
     showTags: boolean
 
     /**
      * Show last logged action for draft in list.
+     * @category Display
      */
     showLastAction: boolean
 
     /**
      * Should flagged drafts be included in inbox.
+     * @category Display
      */
     inboxIncludesFlagged: boolean
 
     /**
      * Should flagged drafts be included in archive.
+     * @category Display
      */
     archiveIncludesFlagged: boolean
 
     /**
+     * Folder tab to select when applying the workspace.
+     * @category Display
+     */
+    loadFolder?: draftFolderTab
+
+    /**
+     * Action group to load in action list when applying the workspace.
+     * @category Display
+     */
+    loadActionListGroup?: ActionGroup
+
+    /**
+     * Action group to load in Action Bar when applying the workspace.
+     * @category Display
+     */
+    loadActionBarGroup?: ActionGroup
+
+    /**
      * Save changes made to the workspace to the database. This must be called to save changes.
+     * 
      */
     update(): void
 
     /**
      * Set sort order for inbox.
+     * @category Sort
      */
-    setInboxSort(sortBy: sortDirections, sortDescending: boolean): void
+    setInboxSort(sortBy: sortBy, sortDescending: boolean): void
 
     /**
      * Query for a list of drafts contained in the workspace.
@@ -2985,27 +3629,30 @@ declare class Workspace {
 
     /**
      * Set sort order for flagged.
+     * @category Sort
      */
     setFlaggedSort(
-        sortBy: sortDirections,
+        sortBy: sortBy,
         sortDescending: boolean,
         sortFlaggedToTop: boolean
     ): void
 
     /**
      * Set sort order for archive.
+     * @category Sort
      */
-    setFlaggedSort(
-        sortBy: sortDirections,
+    setArchiveSort(
+        sortBy: sortBy,
         sortDescending: boolean,
         sortFlaggedToTop: boolean
     ): void
 
     /**
      * Set sort order for "all" drafts folder.
+     * @category Sort
      */
-    setFlaggedSort(
-        sortBy: sortDirections,
+    setAllSort(
+        sortBy: sortBy,
         sortDescending: boolean,
         sortFlaggedToTop: boolean
     ): void
@@ -3014,6 +3661,11 @@ declare class Workspace {
      * create a new workspace object. This is an in-memory object only, unless \`update()\` is called to save the it. The initial state of the workspace properties is based on the configuration of the user's default workspace.
      */
     static create(): Workspace
+
+    /**
+     * Create new instance.
+     */
+    constructor()
 
     /**
      * Get list of all available workspaces.
@@ -3102,16 +3754,16 @@ declare class XMLRPCResponse {
 
   monaco.languages.typescript.javascriptDefaults.addExtraLib(`
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -3125,84 +3777,84 @@ and limitations under the License.
 /// ECMAScript APIs
 /////////////////////////////
 
-declare const NaN: number;
-declare const Infinity: number;
+declare var NaN: number;
+declare var Infinity: number;
 
 /**
-  * Evaluates JavaScript code and executes it.
-  * @param x A String value that contains valid JavaScript code.
-  */
+ * Evaluates JavaScript code and executes it.
+ * @param x A String value that contains valid JavaScript code.
+ */
 declare function eval(x: string): any;
 
 /**
-  * Converts A string to an integer.
-  * @param s A string to convert into a number.
-  * @param radix A value between 2 and 36 that specifies the base of the number in numString.
-  * If this argument is not supplied, strings with a prefix of '0x' are considered hexadecimal.
-  * All other strings are considered decimal.
-  */
+ * Converts a string to an integer.
+ * @param s A string to convert into a number.
+ * @param radix A value between 2 and 36 that specifies the base of the number in numString.
+ * If this argument is not supplied, strings with a prefix of '0x' are considered hexadecimal.
+ * All other strings are considered decimal.
+ */
 declare function parseInt(s: string, radix?: number): number;
 
 /**
-  * Converts a string to a floating-point number.
-  * @param string A string that contains a floating-point number.
-  */
+ * Converts a string to a floating-point number.
+ * @param string A string that contains a floating-point number.
+ */
 declare function parseFloat(string: string): number;
 
 /**
-  * Returns a Boolean value that indicates whether a value is the reserved value NaN (not a number).
-  * @param number A numeric value.
-  */
+ * Returns a Boolean value that indicates whether a value is the reserved value NaN (not a number).
+ * @param number A numeric value.
+ */
 declare function isNaN(number: number): boolean;
 
 /**
-  * Determines whether a supplied number is finite.
-  * @param number Any numeric value.
-  */
+ * Determines whether a supplied number is finite.
+ * @param number Any numeric value.
+ */
 declare function isFinite(number: number): boolean;
 
 /**
-  * Gets the unencoded version of an encoded Uniform Resource Identifier (URI).
-  * @param encodedURI A value representing an encoded URI.
-  */
+ * Gets the unencoded version of an encoded Uniform Resource Identifier (URI).
+ * @param encodedURI A value representing an encoded URI.
+ */
 declare function decodeURI(encodedURI: string): string;
 
 /**
-  * Gets the unencoded version of an encoded component of a Uniform Resource Identifier (URI).
-  * @param encodedURIComponent A value representing an encoded URI component.
-  */
+ * Gets the unencoded version of an encoded component of a Uniform Resource Identifier (URI).
+ * @param encodedURIComponent A value representing an encoded URI component.
+ */
 declare function decodeURIComponent(encodedURIComponent: string): string;
 
 /**
-  * Encodes a text string as a valid Uniform Resource Identifier (URI)
-  * @param uri A value representing an encoded URI.
-  */
+ * Encodes a text string as a valid Uniform Resource Identifier (URI)
+ * @param uri A value representing an encoded URI.
+ */
 declare function encodeURI(uri: string): string;
 
 /**
-  * Encodes a text string as a valid component of a Uniform Resource Identifier (URI).
-  * @param uriComponent A value representing an encoded URI component.
-  */
-declare function encodeURIComponent(uriComponent: string): string;
+ * Encodes a text string as a valid component of a Uniform Resource Identifier (URI).
+ * @param uriComponent A value representing an encoded URI component.
+ */
+declare function encodeURIComponent(uriComponent: string | number | boolean): string;
 
 /**
-  * Computes a new string in which certain characters have been replaced by a hexadecimal escape sequence.
-  * @param string A string value
-  */
+ * Computes a new string in which certain characters have been replaced by a hexadecimal escape sequence.
+ * @param string A string value
+ */
 declare function escape(string: string): string;
 
 /**
-  * Computes a new string in which hexadecimal escape sequences are replaced with the character that it represents.
-  * @param string A string value
-  */
+ * Computes a new string in which hexadecimal escape sequences are replaced with the character that it represents.
+ * @param string A string value
+ */
 declare function unescape(string: string): string;
 
 interface Symbol {
-  /** Returns a string representation of an object. */
-  toString(): string;
+    /** Returns a string representation of an object. */
+    toString(): string;
 
-  /** Returns the primitive value of the specified object. */
-  valueOf(): symbol;
+    /** Returns the primitive value of the specified object. */
+    valueOf(): symbol;
 }
 
 declare type PropertyKey = string | number | symbol;
@@ -3234,21 +3886,21 @@ interface Object {
     valueOf(): Object;
 
     /**
-      * Determines whether an object has a property with the specified name.
-      * @param v A property name.
-      */
+     * Determines whether an object has a property with the specified name.
+     * @param v A property name.
+     */
     hasOwnProperty(v: PropertyKey): boolean;
 
     /**
-      * Determines whether an object exists in another object's prototype chain.
-      * @param v Another object whose prototype chain is to be checked.
-      */
+     * Determines whether an object exists in another object's prototype chain.
+     * @param v Another object whose prototype chain is to be checked.
+     */
     isPrototypeOf(v: Object): boolean;
 
     /**
-      * Determines whether a specified property is enumerable.
-      * @param v A property name.
-      */
+     * Determines whether a specified property is enumerable.
+     * @param v A property name.
+     */
     propertyIsEnumerable(v: PropertyKey): boolean;
 }
 
@@ -3261,138 +3913,138 @@ interface ObjectConstructor {
     readonly prototype: Object;
 
     /**
-      * Returns the prototype of an object.
-      * @param o The object that references the prototype.
-      */
+     * Returns the prototype of an object.
+     * @param o The object that references the prototype.
+     */
     getPrototypeOf(o: any): any;
 
     /**
-      * Gets the own property descriptor of the specified object.
-      * An own property descriptor is one that is defined directly on the object and is not inherited from the object's prototype.
-      * @param o Object that contains the property.
-      * @param p Name of the property.
-    */
+     * Gets the own property descriptor of the specified object.
+     * An own property descriptor is one that is defined directly on the object and is not inherited from the object's prototype.
+     * @param o Object that contains the property.
+     * @param p Name of the property.
+     */
     getOwnPropertyDescriptor(o: any, p: PropertyKey): PropertyDescriptor | undefined;
 
     /**
-      * Returns the names of the own properties of an object. The own properties of an object are those that are defined directly
-      * on that object, and are not inherited from the object's prototype. The properties of an object include both fields (objects) and functions.
-      * @param o Object that contains the own properties.
-      */
+     * Returns the names of the own properties of an object. The own properties of an object are those that are defined directly
+     * on that object, and are not inherited from the object's prototype. The properties of an object include both fields (objects) and functions.
+     * @param o Object that contains the own properties.
+     */
     getOwnPropertyNames(o: any): string[];
 
     /**
-      * Creates an object that has the specified prototype or that has null prototype.
-      * @param o Object to use as a prototype. May be null.
-      */
+     * Creates an object that has the specified prototype or that has null prototype.
+     * @param o Object to use as a prototype. May be null.
+     */
     create(o: object | null): any;
 
     /**
-      * Creates an object that has the specified prototype, and that optionally contains specified properties.
-      * @param o Object to use as a prototype. May be null
-      * @param properties JavaScript object that contains one or more property descriptors.
-      */
+     * Creates an object that has the specified prototype, and that optionally contains specified properties.
+     * @param o Object to use as a prototype. May be null
+     * @param properties JavaScript object that contains one or more property descriptors.
+     */
     create(o: object | null, properties: PropertyDescriptorMap & ThisType<any>): any;
 
     /**
-      * Adds a property to an object, or modifies attributes of an existing property.
-      * @param o Object on which to add or modify the property. This can be a native JavaScript object (that is, a user-defined object or a built in object) or a DOM object.
-      * @param p The property name.
-      * @param attributes Descriptor for the property. It can be for a data property or an accessor property.
-      */
+     * Adds a property to an object, or modifies attributes of an existing property.
+     * @param o Object on which to add or modify the property. This can be a native JavaScript object (that is, a user-defined object or a built in object) or a DOM object.
+     * @param p The property name.
+     * @param attributes Descriptor for the property. It can be for a data property or an accessor property.
+     */
     defineProperty(o: any, p: PropertyKey, attributes: PropertyDescriptor & ThisType<any>): any;
 
     /**
-      * Adds one or more properties to an object, and/or modifies attributes of existing properties.
-      * @param o Object on which to add or modify the properties. This can be a native JavaScript object or a DOM object.
-      * @param properties JavaScript object that contains one or more descriptor objects. Each descriptor object describes a data property or an accessor property.
-      */
+     * Adds one or more properties to an object, and/or modifies attributes of existing properties.
+     * @param o Object on which to add or modify the properties. This can be a native JavaScript object or a DOM object.
+     * @param properties JavaScript object that contains one or more descriptor objects. Each descriptor object describes a data property or an accessor property.
+     */
     defineProperties(o: any, properties: PropertyDescriptorMap & ThisType<any>): any;
 
     /**
-      * Prevents the modification of attributes of existing properties, and prevents the addition of new properties.
-      * @param o Object on which to lock the attributes.
-      */
+     * Prevents the modification of attributes of existing properties, and prevents the addition of new properties.
+     * @param o Object on which to lock the attributes.
+     */
     seal<T>(o: T): T;
 
     /**
-      * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
-      * @param o Object on which to lock the attributes.
-      */
-    freeze<T>(a: T[]): ReadonlyArray<T>;
+     * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
+     * @param o Object on which to lock the attributes.
+     */
+    freeze<T>(a: T[]): readonly T[];
 
     /**
-      * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
-      * @param o Object on which to lock the attributes.
-      */
+     * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
+     * @param o Object on which to lock the attributes.
+     */
     freeze<T extends Function>(f: T): T;
 
     /**
-      * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
-      * @param o Object on which to lock the attributes.
-      */
+     * Prevents the modification of existing property attributes and values, and prevents the addition of new properties.
+     * @param o Object on which to lock the attributes.
+     */
     freeze<T>(o: T): Readonly<T>;
 
     /**
-      * Prevents the addition of new properties to an object.
-      * @param o Object to make non-extensible.
-      */
+     * Prevents the addition of new properties to an object.
+     * @param o Object to make non-extensible.
+     */
     preventExtensions<T>(o: T): T;
 
     /**
-      * Returns true if existing property attributes cannot be modified in an object and new properties cannot be added to the object.
-      * @param o Object to test.
-      */
+     * Returns true if existing property attributes cannot be modified in an object and new properties cannot be added to the object.
+     * @param o Object to test.
+     */
     isSealed(o: any): boolean;
 
     /**
-      * Returns true if existing property attributes and values cannot be modified in an object, and new properties cannot be added to the object.
-      * @param o Object to test.
-      */
+     * Returns true if existing property attributes and values cannot be modified in an object, and new properties cannot be added to the object.
+     * @param o Object to test.
+     */
     isFrozen(o: any): boolean;
 
     /**
-      * Returns a value that indicates whether new properties can be added to an object.
-      * @param o Object to test.
-      */
+     * Returns a value that indicates whether new properties can be added to an object.
+     * @param o Object to test.
+     */
     isExtensible(o: any): boolean;
 
     /**
-      * Returns the names of the enumerable properties and methods of an object.
-      * @param o Object that contains the properties and methods. This can be an object that you created or an existing Document Object Model (DOM) object.
-      */
-    keys(o: {}): string[];
+     * Returns the names of the enumerable string properties and methods of an object.
+     * @param o Object that contains the properties and methods. This can be an object that you created or an existing Document Object Model (DOM) object.
+     */
+    keys(o: object): string[];
 }
 
 /**
-  * Provides functionality common to all JavaScript objects.
-  */
-declare const Object: ObjectConstructor;
+ * Provides functionality common to all JavaScript objects.
+ */
+declare var Object: ObjectConstructor;
 
 /**
-  * Creates a new function.
-  */
+ * Creates a new function.
+ */
 interface Function {
     /**
-      * Calls the function, substituting the specified object for the this value of the function, and the specified array for the arguments of the function.
-      * @param thisArg The object to be used as the this object.
-      * @param argArray A set of arguments to be passed to the function.
-      */
+     * Calls the function, substituting the specified object for the this value of the function, and the specified array for the arguments of the function.
+     * @param thisArg The object to be used as the this object.
+     * @param argArray A set of arguments to be passed to the function.
+     */
     apply(this: Function, thisArg: any, argArray?: any): any;
 
     /**
-      * Calls a method of an object, substituting another object for the current object.
-      * @param thisArg The object to be used as the current object.
-      * @param argArray A list of arguments to be passed to the method.
-      */
+     * Calls a method of an object, substituting another object for the current object.
+     * @param thisArg The object to be used as the current object.
+     * @param argArray A list of arguments to be passed to the method.
+     */
     call(this: Function, thisArg: any, ...argArray: any[]): any;
 
     /**
-      * For a given function, creates a bound function that has the same body as the original function.
-      * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
-      * @param thisArg An object to which the this keyword can refer inside the new function.
-      * @param argArray A list of arguments to be passed to the new function.
-      */
+     * For a given function, creates a bound function that has the same body as the original function.
+     * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
+     * @param thisArg An object to which the this keyword can refer inside the new function.
+     * @param argArray A list of arguments to be passed to the new function.
+     */
     bind(this: Function, thisArg: any, ...argArray: any[]): any;
 
     /** Returns a string representation of a function. */
@@ -3408,20 +4060,20 @@ interface Function {
 
 interface FunctionConstructor {
     /**
-      * Creates a new function.
-      * @param args A list of arguments the function accepts.
-      */
+     * Creates a new function.
+     * @param args A list of arguments the function accepts.
+     */
     new(...args: string[]): Function;
     (...args: string[]): Function;
     readonly prototype: Function;
 }
 
-declare const Function: FunctionConstructor;
+declare var Function: FunctionConstructor;
 
 /**
  * Extracts the type of the 'this' parameter of a function type, or 'unknown' if the function type has no 'this' parameter.
  */
-type ThisParameterType<T> = T extends (this: unknown, ...args: any[]) => any ? unknown : T extends (this: infer U, ...args: any[]) => any ? U : unknown;
+type ThisParameterType<T> = T extends (this: infer U, ...args: any[]) => any ? U : unknown;
 
 /**
  * Removes the 'this' parameter from a function type.
@@ -3430,26 +4082,26 @@ type OmitThisParameter<T> = unknown extends ThisParameterType<T> ? T : T extends
 
 interface CallableFunction extends Function {
     /**
-      * Calls the function with the specified object as the this value and the elements of specified array as the arguments.
-      * @param thisArg The object to be used as the this object.
-      * @param args An array of argument values to be passed to the function.
-      */
+     * Calls the function with the specified object as the this value and the elements of specified array as the arguments.
+     * @param thisArg The object to be used as the this object.
+     * @param args An array of argument values to be passed to the function.
+     */
     apply<T, R>(this: (this: T) => R, thisArg: T): R;
     apply<T, A extends any[], R>(this: (this: T, ...args: A) => R, thisArg: T, args: A): R;
 
     /**
-      * Calls the function with the specified object as the this value and the specified rest arguments as the arguments.
-      * @param thisArg The object to be used as the this object.
-      * @param args Argument values to be passed to the function.
-      */
+     * Calls the function with the specified object as the this value and the specified rest arguments as the arguments.
+     * @param thisArg The object to be used as the this object.
+     * @param args Argument values to be passed to the function.
+     */
     call<T, A extends any[], R>(this: (this: T, ...args: A) => R, thisArg: T, ...args: A): R;
 
     /**
-      * For a given function, creates a bound function that has the same body as the original function.
-      * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
-      * @param thisArg The object to be used as the this object.
-      * @param args Arguments to bind to the parameters of the function.
-      */
+     * For a given function, creates a bound function that has the same body as the original function.
+     * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
+     * @param thisArg The object to be used as the this object.
+     * @param args Arguments to bind to the parameters of the function.
+     */
     bind<T>(this: T, thisArg: ThisParameterType<T>): OmitThisParameter<T>;
     bind<T, A0, A extends any[], R>(this: (this: T, arg0: A0, ...args: A) => R, thisArg: T, arg0: A0): (...args: A) => R;
     bind<T, A0, A1, A extends any[], R>(this: (this: T, arg0: A0, arg1: A1, ...args: A) => R, thisArg: T, arg0: A0, arg1: A1): (...args: A) => R;
@@ -3460,26 +4112,26 @@ interface CallableFunction extends Function {
 
 interface NewableFunction extends Function {
     /**
-      * Calls the function with the specified object as the this value and the elements of specified array as the arguments.
-      * @param thisArg The object to be used as the this object.
-      * @param args An array of argument values to be passed to the function.
-      */
+     * Calls the function with the specified object as the this value and the elements of specified array as the arguments.
+     * @param thisArg The object to be used as the this object.
+     * @param args An array of argument values to be passed to the function.
+     */
     apply<T>(this: new () => T, thisArg: T): void;
     apply<T, A extends any[]>(this: new (...args: A) => T, thisArg: T, args: A): void;
 
     /**
-      * Calls the function with the specified object as the this value and the specified rest arguments as the arguments.
-      * @param thisArg The object to be used as the this object.
-      * @param args Argument values to be passed to the function.
-      */
+     * Calls the function with the specified object as the this value and the specified rest arguments as the arguments.
+     * @param thisArg The object to be used as the this object.
+     * @param args Argument values to be passed to the function.
+     */
     call<T, A extends any[]>(this: new (...args: A) => T, thisArg: T, ...args: A): void;
 
     /**
-      * For a given function, creates a bound function that has the same body as the original function.
-      * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
-      * @param thisArg The object to be used as the this object.
-      * @param args Arguments to bind to the parameters of the function.
-      */
+     * For a given function, creates a bound function that has the same body as the original function.
+     * The this object of the bound function is associated with the specified object, and has the specified initial parameters.
+     * @param thisArg The object to be used as the this object.
+     * @param args Arguments to bind to the parameters of the function.
+     */
     bind<T>(this: T, thisArg: any): T;
     bind<A0, A extends any[], R>(this: new (arg0: A0, ...args: A) => R, thisArg: any, arg0: A0): new (...args: A) => R;
     bind<A0, A1, A extends any[], R>(this: new (arg0: A0, arg1: A1, ...args: A) => R, thisArg: any, arg0: A0, arg1: A1): new (...args: A) => R;
@@ -3499,103 +4151,103 @@ interface String {
     toString(): string;
 
     /**
-      * Returns the character at the specified index.
-      * @param pos The zero-based index of the desired character.
-      */
+     * Returns the character at the specified index.
+     * @param pos The zero-based index of the desired character.
+     */
     charAt(pos: number): string;
 
     /**
-      * Returns the Unicode value of the character at the specified location.
-      * @param index The zero-based index of the desired character. If there is no character at the specified index, NaN is returned.
-      */
+     * Returns the Unicode value of the character at the specified location.
+     * @param index The zero-based index of the desired character. If there is no character at the specified index, NaN is returned.
+     */
     charCodeAt(index: number): number;
 
     /**
-      * Returns a string that contains the concatenation of two or more strings.
-      * @param strings The strings to append to the end of the string.
-      */
+     * Returns a string that contains the concatenation of two or more strings.
+     * @param strings The strings to append to the end of the string.
+     */
     concat(...strings: string[]): string;
 
     /**
-      * Returns the position of the first occurrence of a substring.
-      * @param searchString The substring to search for in the string
-      * @param position The index at which to begin searching the String object. If omitted, search starts at the beginning of the string.
-      */
+     * Returns the position of the first occurrence of a substring.
+     * @param searchString The substring to search for in the string
+     * @param position The index at which to begin searching the String object. If omitted, search starts at the beginning of the string.
+     */
     indexOf(searchString: string, position?: number): number;
 
     /**
-      * Returns the last occurrence of a substring in the string.
-      * @param searchString The substring to search for.
-      * @param position The index at which to begin searching. If omitted, the search begins at the end of the string.
-      */
+     * Returns the last occurrence of a substring in the string.
+     * @param searchString The substring to search for.
+     * @param position The index at which to begin searching. If omitted, the search begins at the end of the string.
+     */
     lastIndexOf(searchString: string, position?: number): number;
 
     /**
-      * Determines whether two strings are equivalent in the current locale.
-      * @param that String to compare to target string
-      */
+     * Determines whether two strings are equivalent in the current locale.
+     * @param that String to compare to target string
+     */
     localeCompare(that: string): number;
 
     /**
-      * Matches a string with a regular expression, and returns an array containing the results of that search.
-      * @param regexp A variable name or string literal containing the regular expression pattern and flags.
-      */
+     * Matches a string with a regular expression, and returns an array containing the results of that search.
+     * @param regexp A variable name or string literal containing the regular expression pattern and flags.
+     */
     match(regexp: string | RegExp): RegExpMatchArray | null;
 
     /**
-      * Replaces text in a string, using a regular expression or search string.
-      * @param searchValue A string to search for.
-      * @param replaceValue A string containing the text to replace for every successful match of searchValue in this string.
-      */
+     * Replaces text in a string, using a regular expression or search string.
+     * @param searchValue A string to search for.
+     * @param replaceValue A string containing the text to replace for every successful match of searchValue in this string.
+     */
     replace(searchValue: string | RegExp, replaceValue: string): string;
 
     /**
-      * Replaces text in a string, using a regular expression or search string.
-      * @param searchValue A string to search for.
-      * @param replacer A function that returns the replacement text.
-      */
+     * Replaces text in a string, using a regular expression or search string.
+     * @param searchValue A string to search for.
+     * @param replacer A function that returns the replacement text.
+     */
     replace(searchValue: string | RegExp, replacer: (substring: string, ...args: any[]) => string): string;
 
     /**
-      * Finds the first substring match in a regular expression search.
-      * @param regexp The regular expression pattern and applicable flags.
-      */
+     * Finds the first substring match in a regular expression search.
+     * @param regexp The regular expression pattern and applicable flags.
+     */
     search(regexp: string | RegExp): number;
 
     /**
-      * Returns a section of a string.
-      * @param start The index to the beginning of the specified portion of stringObj.
-      * @param end The index to the end of the specified portion of stringObj. The substring includes the characters up to, but not including, the character indicated by end.
-      * If this value is not specified, the substring continues to the end of stringObj.
-      */
+     * Returns a section of a string.
+     * @param start The index to the beginning of the specified portion of stringObj.
+     * @param end The index to the end of the specified portion of stringObj. The substring includes the characters up to, but not including, the character indicated by end.
+     * If this value is not specified, the substring continues to the end of stringObj.
+     */
     slice(start?: number, end?: number): string;
 
     /**
-      * Split a string into substrings using the specified separator and return them as an array.
-      * @param separator A string that identifies character or characters to use in separating the string. If omitted, a single-element array containing the entire string is returned.
-      * @param limit A value used to limit the number of elements returned in the array.
-      */
+     * Split a string into substrings using the specified separator and return them as an array.
+     * @param separator A string that identifies character or characters to use in separating the string. If omitted, a single-element array containing the entire string is returned.
+     * @param limit A value used to limit the number of elements returned in the array.
+     */
     split(separator: string | RegExp, limit?: number): string[];
 
     /**
-      * Returns the substring at the specified location within a String object.
-      * @param start The zero-based index number indicating the beginning of the substring.
-      * @param end Zero-based index number indicating the end of the substring. The substring includes the characters up to, but not including, the character indicated by end.
-      * If end is omitted, the characters from start through the end of the original string are returned.
-      */
+     * Returns the substring at the specified location within a String object.
+     * @param start The zero-based index number indicating the beginning of the substring.
+     * @param end Zero-based index number indicating the end of the substring. The substring includes the characters up to, but not including, the character indicated by end.
+     * If end is omitted, the characters from start through the end of the original string are returned.
+     */
     substring(start: number, end?: number): string;
 
     /** Converts all the alphabetic characters in a string to lowercase. */
     toLowerCase(): string;
 
     /** Converts all alphabetic characters to lowercase, taking into account the host environment's current locale. */
-    toLocaleLowerCase(): string;
+    toLocaleLowerCase(locales?: string | string[]): string;
 
     /** Converts all the alphabetic characters in a string to uppercase. */
     toUpperCase(): string;
 
     /** Returns a string where all alphabetic characters have been converted to uppercase, taking into account the host environment's current locale. */
-    toLocaleUpperCase(): string;
+    toLocaleUpperCase(locales?: string | string[]): string;
 
     /** Removes the leading and trailing white space and line terminator characters from a string. */
     trim(): string;
@@ -3605,10 +4257,10 @@ interface String {
 
     // IE extensions
     /**
-      * Gets a substring beginning at the specified location and having the specified length.
-      * @param from The starting position of the desired substring. The index of the first character in the string is zero.
-      * @param length The number of characters to include in the returned substring.
-      */
+     * Gets a substring beginning at the specified location and having the specified length.
+     * @param from The starting position of the desired substring. The index of the first character in the string is zero.
+     * @param length The number of characters to include in the returned substring.
+     */
     substr(from: number, length?: number): string;
 
     /** Returns the primitive value of the specified object. */
@@ -3625,9 +4277,9 @@ interface StringConstructor {
 }
 
 /**
-  * Allows manipulation and formatting of text strings and determination and location of substrings within strings.
-  */
-declare const String: StringConstructor;
+ * Allows manipulation and formatting of text strings and determination and location of substrings within strings.
+ */
+declare var String: StringConstructor;
 
 interface Boolean {
     /** Returns the primitive value of the specified object. */
@@ -3636,35 +4288,35 @@ interface Boolean {
 
 interface BooleanConstructor {
     new(value?: any): Boolean;
-    (value?: any): boolean;
+    <T>(value?: T): boolean;
     readonly prototype: Boolean;
 }
 
-declare const Boolean: BooleanConstructor;
+declare var Boolean: BooleanConstructor;
 
 interface Number {
     /**
-      * Returns a string representation of an object.
-      * @param radix Specifies a radix for converting numeric values to strings. This value is only used for numbers.
-      */
+     * Returns a string representation of an object.
+     * @param radix Specifies a radix for converting numeric values to strings. This value is only used for numbers.
+     */
     toString(radix?: number): string;
 
     /**
-      * Returns a string representing a number in fixed-point notation.
-      * @param fractionDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
-      */
+     * Returns a string representing a number in fixed-point notation.
+     * @param fractionDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
+     */
     toFixed(fractionDigits?: number): string;
 
     /**
-      * Returns a string containing a number represented in exponential notation.
-      * @param fractionDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
-      */
+     * Returns a string containing a number represented in exponential notation.
+     * @param fractionDigits Number of digits after the decimal point. Must be in the range 0 - 20, inclusive.
+     */
     toExponential(fractionDigits?: number): string;
 
     /**
-      * Returns a string containing a number represented either in exponential or fixed-point notation with a specified number of digits.
-      * @param precision Number of significant digits. Must be in the range 1 - 21, inclusive.
-      */
+     * Returns a string containing a number represented either in exponential or fixed-point notation with a specified number of digits.
+     * @param precision Number of significant digits. Must be in the range 1 - 21, inclusive.
+     */
     toPrecision(precision?: number): string;
 
     /** Returns the primitive value of the specified object. */
@@ -3683,29 +4335,29 @@ interface NumberConstructor {
     readonly MIN_VALUE: number;
 
     /**
-      * A value that is not a number.
-      * In equality comparisons, NaN does not equal any value, including itself. To test whether a value is equivalent to NaN, use the isNaN function.
-      */
+     * A value that is not a number.
+     * In equality comparisons, NaN does not equal any value, including itself. To test whether a value is equivalent to NaN, use the isNaN function.
+     */
     readonly NaN: number;
 
     /**
-      * A value that is less than the largest negative number that can be represented in JavaScript.
-      * JavaScript displays NEGATIVE_INFINITY values as -infinity.
-      */
+     * A value that is less than the largest negative number that can be represented in JavaScript.
+     * JavaScript displays NEGATIVE_INFINITY values as -infinity.
+     */
     readonly NEGATIVE_INFINITY: number;
 
     /**
-      * A value greater than the largest number that can be represented in JavaScript.
-      * JavaScript displays POSITIVE_INFINITY values as infinity.
-      */
+     * A value greater than the largest number that can be represented in JavaScript.
+     * JavaScript displays POSITIVE_INFINITY values as infinity.
+     */
     readonly POSITIVE_INFINITY: number;
 }
 
 /** An object that represents a number of any kind. All JavaScript numbers are 64-bit floating-point numbers. */
-declare const Number: NumberConstructor;
+declare var Number: NumberConstructor;
 
 interface TemplateStringsArray extends ReadonlyArray<string> {
-    readonly raw: ReadonlyArray<string>;
+    readonly raw: readonly string[];
 }
 
 /**
@@ -3735,98 +4387,98 @@ interface Math {
     /** The square root of 2. */
     readonly SQRT2: number;
     /**
-      * Returns the absolute value of a number (the value without regard to whether it is positive or negative).
-      * For example, the absolute value of -5 is the same as the absolute value of 5.
-      * @param x A numeric expression for which the absolute value is needed.
-      */
+     * Returns the absolute value of a number (the value without regard to whether it is positive or negative).
+     * For example, the absolute value of -5 is the same as the absolute value of 5.
+     * @param x A numeric expression for which the absolute value is needed.
+     */
     abs(x: number): number;
     /**
-      * Returns the arc cosine (or inverse cosine) of a number.
-      * @param x A numeric expression.
-      */
+     * Returns the arc cosine (or inverse cosine) of a number.
+     * @param x A numeric expression.
+     */
     acos(x: number): number;
     /**
-      * Returns the arcsine of a number.
-      * @param x A numeric expression.
-      */
+     * Returns the arcsine of a number.
+     * @param x A numeric expression.
+     */
     asin(x: number): number;
     /**
-      * Returns the arctangent of a number.
-      * @param x A numeric expression for which the arctangent is needed.
-      */
+     * Returns the arctangent of a number.
+     * @param x A numeric expression for which the arctangent is needed.
+     */
     atan(x: number): number;
     /**
-      * Returns the angle (in radians) from the X axis to a point.
-      * @param y A numeric expression representing the cartesian y-coordinate.
-      * @param x A numeric expression representing the cartesian x-coordinate.
-      */
+     * Returns the angle (in radians) from the X axis to a point.
+     * @param y A numeric expression representing the cartesian y-coordinate.
+     * @param x A numeric expression representing the cartesian x-coordinate.
+     */
     atan2(y: number, x: number): number;
     /**
-      * Returns the smallest integer greater than or equal to its numeric argument.
-      * @param x A numeric expression.
-      */
+     * Returns the smallest integer greater than or equal to its numeric argument.
+     * @param x A numeric expression.
+     */
     ceil(x: number): number;
     /**
-      * Returns the cosine of a number.
-      * @param x A numeric expression that contains an angle measured in radians.
-      */
+     * Returns the cosine of a number.
+     * @param x A numeric expression that contains an angle measured in radians.
+     */
     cos(x: number): number;
     /**
-      * Returns e (the base of natural logarithms) raised to a power.
-      * @param x A numeric expression representing the power of e.
-      */
+     * Returns e (the base of natural logarithms) raised to a power.
+     * @param x A numeric expression representing the power of e.
+     */
     exp(x: number): number;
     /**
-      * Returns the greatest integer less than or equal to its numeric argument.
-      * @param x A numeric expression.
-      */
+     * Returns the greatest integer less than or equal to its numeric argument.
+     * @param x A numeric expression.
+     */
     floor(x: number): number;
     /**
-      * Returns the natural logarithm (base e) of a number.
-      * @param x A numeric expression.
-      */
+     * Returns the natural logarithm (base e) of a number.
+     * @param x A numeric expression.
+     */
     log(x: number): number;
     /**
-      * Returns the larger of a set of supplied numeric expressions.
-      * @param values Numeric expressions to be evaluated.
-      */
+     * Returns the larger of a set of supplied numeric expressions.
+     * @param values Numeric expressions to be evaluated.
+     */
     max(...values: number[]): number;
     /**
-      * Returns the smaller of a set of supplied numeric expressions.
-      * @param values Numeric expressions to be evaluated.
-      */
+     * Returns the smaller of a set of supplied numeric expressions.
+     * @param values Numeric expressions to be evaluated.
+     */
     min(...values: number[]): number;
     /**
-      * Returns the value of a base expression taken to a specified power.
-      * @param x The base value of the expression.
-      * @param y The exponent value of the expression.
-      */
+     * Returns the value of a base expression taken to a specified power.
+     * @param x The base value of the expression.
+     * @param y The exponent value of the expression.
+     */
     pow(x: number, y: number): number;
     /** Returns a pseudorandom number between 0 and 1. */
     random(): number;
     /**
-      * Returns a supplied numeric expression rounded to the nearest number.
-      * @param x The value to be rounded to the nearest number.
-      */
+     * Returns a supplied numeric expression rounded to the nearest integer.
+     * @param x The value to be rounded to the nearest integer.
+     */
     round(x: number): number;
     /**
-      * Returns the sine of a number.
-      * @param x A numeric expression that contains an angle measured in radians.
-      */
+     * Returns the sine of a number.
+     * @param x A numeric expression that contains an angle measured in radians.
+     */
     sin(x: number): number;
     /**
-      * Returns the square root of a number.
-      * @param x A numeric expression.
-      */
+     * Returns the square root of a number.
+     * @param x A numeric expression.
+     */
     sqrt(x: number): number;
     /**
-      * Returns the tangent of a number.
-      * @param x A numeric expression that contains an angle measured in radians.
-      */
+     * Returns the tangent of a number.
+     * @param x A numeric expression that contains an angle measured in radians.
+     */
     tan(x: number): number;
 }
 /** An intrinsic object that provides basic mathematics functionality and constants. */
-declare const Math: Math;
+declare var Math: Math;
 
 /** Enables basic storage and retrieval of dates and times. */
 interface Date {
@@ -3881,98 +4533,98 @@ interface Date {
     /** Gets the difference in minutes between the time on the local computer and Universal Coordinated Time (UTC). */
     getTimezoneOffset(): number;
     /**
-      * Sets the date and time value in the Date object.
-      * @param time A numeric value representing the number of elapsed milliseconds since midnight, January 1, 1970 GMT.
-      */
+     * Sets the date and time value in the Date object.
+     * @param time A numeric value representing the number of elapsed milliseconds since midnight, January 1, 1970 GMT.
+     */
     setTime(time: number): number;
     /**
-      * Sets the milliseconds value in the Date object using local time.
-      * @param ms A numeric value equal to the millisecond value.
-      */
+     * Sets the milliseconds value in the Date object using local time.
+     * @param ms A numeric value equal to the millisecond value.
+     */
     setMilliseconds(ms: number): number;
     /**
-      * Sets the milliseconds value in the Date object using Universal Coordinated Time (UTC).
-      * @param ms A numeric value equal to the millisecond value.
-      */
+     * Sets the milliseconds value in the Date object using Universal Coordinated Time (UTC).
+     * @param ms A numeric value equal to the millisecond value.
+     */
     setUTCMilliseconds(ms: number): number;
 
     /**
-      * Sets the seconds value in the Date object using local time.
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the seconds value in the Date object using local time.
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setSeconds(sec: number, ms?: number): number;
     /**
-      * Sets the seconds value in the Date object using Universal Coordinated Time (UTC).
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the seconds value in the Date object using Universal Coordinated Time (UTC).
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setUTCSeconds(sec: number, ms?: number): number;
     /**
-      * Sets the minutes value in the Date object using local time.
-      * @param min A numeric value equal to the minutes value.
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the minutes value in the Date object using local time.
+     * @param min A numeric value equal to the minutes value.
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setMinutes(min: number, sec?: number, ms?: number): number;
     /**
-      * Sets the minutes value in the Date object using Universal Coordinated Time (UTC).
-      * @param min A numeric value equal to the minutes value.
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the minutes value in the Date object using Universal Coordinated Time (UTC).
+     * @param min A numeric value equal to the minutes value.
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setUTCMinutes(min: number, sec?: number, ms?: number): number;
     /**
-      * Sets the hour value in the Date object using local time.
-      * @param hours A numeric value equal to the hours value.
-      * @param min A numeric value equal to the minutes value.
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the hour value in the Date object using local time.
+     * @param hours A numeric value equal to the hours value.
+     * @param min A numeric value equal to the minutes value.
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setHours(hours: number, min?: number, sec?: number, ms?: number): number;
     /**
-      * Sets the hours value in the Date object using Universal Coordinated Time (UTC).
-      * @param hours A numeric value equal to the hours value.
-      * @param min A numeric value equal to the minutes value.
-      * @param sec A numeric value equal to the seconds value.
-      * @param ms A numeric value equal to the milliseconds value.
-      */
+     * Sets the hours value in the Date object using Universal Coordinated Time (UTC).
+     * @param hours A numeric value equal to the hours value.
+     * @param min A numeric value equal to the minutes value.
+     * @param sec A numeric value equal to the seconds value.
+     * @param ms A numeric value equal to the milliseconds value.
+     */
     setUTCHours(hours: number, min?: number, sec?: number, ms?: number): number;
     /**
-      * Sets the numeric day-of-the-month value of the Date object using local time.
-      * @param date A numeric value equal to the day of the month.
-      */
+     * Sets the numeric day-of-the-month value of the Date object using local time.
+     * @param date A numeric value equal to the day of the month.
+     */
     setDate(date: number): number;
     /**
-      * Sets the numeric day of the month in the Date object using Universal Coordinated Time (UTC).
-      * @param date A numeric value equal to the day of the month.
-      */
+     * Sets the numeric day of the month in the Date object using Universal Coordinated Time (UTC).
+     * @param date A numeric value equal to the day of the month.
+     */
     setUTCDate(date: number): number;
     /**
-      * Sets the month value in the Date object using local time.
-      * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively.
-      * @param date A numeric value representing the day of the month. If this value is not supplied, the value from a call to the getDate method is used.
-      */
+     * Sets the month value in the Date object using local time.
+     * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively.
+     * @param date A numeric value representing the day of the month. If this value is not supplied, the value from a call to the getDate method is used.
+     */
     setMonth(month: number, date?: number): number;
     /**
-      * Sets the month value in the Date object using Universal Coordinated Time (UTC).
-      * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively.
-      * @param date A numeric value representing the day of the month. If it is not supplied, the value from a call to the getUTCDate method is used.
-      */
+     * Sets the month value in the Date object using Universal Coordinated Time (UTC).
+     * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively.
+     * @param date A numeric value representing the day of the month. If it is not supplied, the value from a call to the getUTCDate method is used.
+     */
     setUTCMonth(month: number, date?: number): number;
     /**
-      * Sets the year of the Date object using local time.
-      * @param year A numeric value for the year.
-      * @param month A zero-based numeric value for the month (0 for January, 11 for December). Must be specified if numDate is specified.
-      * @param date A numeric value equal for the day of the month.
-      */
+     * Sets the year of the Date object using local time.
+     * @param year A numeric value for the year.
+     * @param month A zero-based numeric value for the month (0 for January, 11 for December). Must be specified if numDate is specified.
+     * @param date A numeric value equal for the day of the month.
+     */
     setFullYear(year: number, month?: number, date?: number): number;
     /**
-      * Sets the year value in the Date object using Universal Coordinated Time (UTC).
-      * @param year A numeric value equal to the year.
-      * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively. Must be supplied if numDate is supplied.
-      * @param date A numeric value equal to the day of the month.
-      */
+     * Sets the year value in the Date object using Universal Coordinated Time (UTC).
+     * @param year A numeric value equal to the year.
+     * @param month A numeric value equal to the month. The value for January is 0, and other month values follow consecutively. Must be supplied if numDate is supplied.
+     * @param date A numeric value equal to the day of the month.
+     */
     setUTCFullYear(year: number, month?: number, date?: number): number;
     /** Returns a date converted to a string using Universal Coordinated Time (UTC). */
     toUTCString(): string;
@@ -3989,25 +4641,25 @@ interface DateConstructor {
     (): string;
     readonly prototype: Date;
     /**
-      * Parses a string containing a date, and returns the number of milliseconds between that date and midnight, January 1, 1970.
-      * @param s A date string
-      */
+     * Parses a string containing a date, and returns the number of milliseconds between that date and midnight, January 1, 1970.
+     * @param s A date string
+     */
     parse(s: string): number;
     /**
-      * Returns the number of milliseconds between midnight, January 1, 1970 Universal Coordinated Time (UTC) (or GMT) and the specified date.
-      * @param year The full year designation is required for cross-century date accuracy. If year is between 0 and 99 is used, then year is assumed to be 1900 + year.
-      * @param month The month as an number between 0 and 11 (January to December).
-      * @param date The date as an number between 1 and 31.
-      * @param hours Must be supplied if minutes is supplied. An number from 0 to 23 (midnight to 11pm) that specifies the hour.
-      * @param minutes Must be supplied if seconds is supplied. An number from 0 to 59 that specifies the minutes.
-      * @param seconds Must be supplied if milliseconds is supplied. An number from 0 to 59 that specifies the seconds.
-      * @param ms An number from 0 to 999 that specifies the milliseconds.
-      */
+     * Returns the number of milliseconds between midnight, January 1, 1970 Universal Coordinated Time (UTC) (or GMT) and the specified date.
+     * @param year The full year designation is required for cross-century date accuracy. If year is between 0 and 99 is used, then year is assumed to be 1900 + year.
+     * @param month The month as a number between 0 and 11 (January to December).
+     * @param date The date as a number between 1 and 31.
+     * @param hours Must be supplied if minutes is supplied. A number from 0 to 23 (midnight to 11pm) that specifies the hour.
+     * @param minutes Must be supplied if seconds is supplied. A number from 0 to 59 that specifies the minutes.
+     * @param seconds Must be supplied if milliseconds is supplied. A number from 0 to 59 that specifies the seconds.
+     * @param ms A number from 0 to 999 that specifies the milliseconds.
+     */
     UTC(year: number, month: number, date?: number, hours?: number, minutes?: number, seconds?: number, ms?: number): number;
     now(): number;
 }
 
-declare const Date: DateConstructor;
+declare var Date: DateConstructor;
 
 interface RegExpMatchArray extends Array<string> {
     index?: number;
@@ -4021,15 +4673,15 @@ interface RegExpExecArray extends Array<string> {
 
 interface RegExp {
     /**
-      * Executes a search on a string using a regular expression pattern, and returns an array containing the results of that search.
-      * @param string The String object or string literal on which to perform the search.
-      */
+     * Executes a search on a string using a regular expression pattern, and returns an array containing the results of that search.
+     * @param string The String object or string literal on which to perform the search.
+     */
     exec(string: string): RegExpExecArray | null;
 
     /**
-      * Returns a Boolean value that indicates whether or not a pattern exists in a searched string.
-      * @param string String on which to perform the search.
-      */
+     * Returns a Boolean value that indicates whether or not a pattern exists in a searched string.
+     * @param string String on which to perform the search.
+     */
     test(string: string): boolean;
 
     /** Returns a copy of the text of the regular expression pattern. Read-only. The regExp argument is a Regular expression object. It can be a variable name or a literal. */
@@ -4070,7 +4722,7 @@ interface RegExpConstructor {
     lastMatch: string;
 }
 
-declare const RegExp: RegExpConstructor;
+declare var RegExp: RegExpConstructor;
 
 interface Error {
     name: string;
@@ -4084,102 +4736,102 @@ interface ErrorConstructor {
     readonly prototype: Error;
 }
 
-declare const Error: ErrorConstructor;
+declare var Error: ErrorConstructor;
 
 interface EvalError extends Error {
 }
 
-interface EvalErrorConstructor {
+interface EvalErrorConstructor extends ErrorConstructor {
     new(message?: string): EvalError;
     (message?: string): EvalError;
     readonly prototype: EvalError;
 }
 
-declare const EvalError: EvalErrorConstructor;
+declare var EvalError: EvalErrorConstructor;
 
 interface RangeError extends Error {
 }
 
-interface RangeErrorConstructor {
+interface RangeErrorConstructor extends ErrorConstructor {
     new(message?: string): RangeError;
     (message?: string): RangeError;
     readonly prototype: RangeError;
 }
 
-declare const RangeError: RangeErrorConstructor;
+declare var RangeError: RangeErrorConstructor;
 
 interface ReferenceError extends Error {
 }
 
-interface ReferenceErrorConstructor {
+interface ReferenceErrorConstructor extends ErrorConstructor {
     new(message?: string): ReferenceError;
     (message?: string): ReferenceError;
     readonly prototype: ReferenceError;
 }
 
-declare const ReferenceError: ReferenceErrorConstructor;
+declare var ReferenceError: ReferenceErrorConstructor;
 
 interface SyntaxError extends Error {
 }
 
-interface SyntaxErrorConstructor {
+interface SyntaxErrorConstructor extends ErrorConstructor {
     new(message?: string): SyntaxError;
     (message?: string): SyntaxError;
     readonly prototype: SyntaxError;
 }
 
-declare const SyntaxError: SyntaxErrorConstructor;
+declare var SyntaxError: SyntaxErrorConstructor;
 
 interface TypeError extends Error {
 }
 
-interface TypeErrorConstructor {
+interface TypeErrorConstructor extends ErrorConstructor {
     new(message?: string): TypeError;
     (message?: string): TypeError;
     readonly prototype: TypeError;
 }
 
-declare const TypeError: TypeErrorConstructor;
+declare var TypeError: TypeErrorConstructor;
 
 interface URIError extends Error {
 }
 
-interface URIErrorConstructor {
+interface URIErrorConstructor extends ErrorConstructor {
     new(message?: string): URIError;
     (message?: string): URIError;
     readonly prototype: URIError;
 }
 
-declare const URIError: URIErrorConstructor;
+declare var URIError: URIErrorConstructor;
 
 interface JSON {
     /**
-      * Converts a JavaScript Object Notation (JSON) string into an object.
-      * @param text A valid JSON string.
-      * @param reviver A function that transforms the results. This function is called for each member of the object.
-      * If a member contains nested objects, the nested objects are transformed before the parent object is.
-      */
+     * Converts a JavaScript Object Notation (JSON) string into an object.
+     * @param text A valid JSON string.
+     * @param reviver A function that transforms the results. This function is called for each member of the object.
+     * If a member contains nested objects, the nested objects are transformed before the parent object is.
+     */
     parse(text: string, reviver?: (this: any, key: string, value: any) => any): any;
     /**
-      * Converts a JavaScript value to a JavaScript Object Notation (JSON) string.
-      * @param value A JavaScript value, usually an object or array, to be converted.
-      * @param replacer A function that transforms the results.
-      * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
-      */
+     * Converts a JavaScript value to a JavaScript Object Notation (JSON) string.
+     * @param value A JavaScript value, usually an object or array, to be converted.
+     * @param replacer A function that transforms the results.
+     * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
+     */
     stringify(value: any, replacer?: (this: any, key: string, value: any) => any, space?: string | number): string;
     /**
-      * Converts a JavaScript value to a JavaScript Object Notation (JSON) string.
-      * @param value A JavaScript value, usually an object or array, to be converted.
-      * @param replacer An array of strings and numbers that acts as a approved list for selecting the object properties that will be stringified.
-      * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
-      */
+     * Converts a JavaScript value to a JavaScript Object Notation (JSON) string.
+     * @param value A JavaScript value, usually an object or array, to be converted.
+     * @param replacer An array of strings and numbers that acts as a approved list for selecting the object properties that will be stringified.
+     * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
+     */
     stringify(value: any, replacer?: (number | string)[] | null, space?: string | number): string;
 }
 
 /**
-  * An intrinsic object that provides functions to convert JavaScript values to and from the JavaScript Object Notation (JSON) format.
-  */
-declare const JSON: JSON;
+ * An intrinsic object that provides functions to convert JavaScript values to and from the JavaScript Object Notation (JSON) format.
+ */
+declare var JSON: JSON;
 
 
 /////////////////////////////
@@ -4188,112 +4840,127 @@ declare const JSON: JSON;
 
 interface ReadonlyArray<T> {
     /**
-      * Gets the length of the array. This is a number one higher than the highest element defined in an array.
-      */
+     * Gets the length of the array. This is a number one higher than the highest element defined in an array.
+     */
     readonly length: number;
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
     /**
-      * Returns a string representation of an array. The elements are converted to string using their toLocalString methods.
-      */
+     * Returns a string representation of an array. The elements are converted to string using their toLocalString methods.
+     */
     toLocaleString(): string;
     /**
-      * Combines two or more arrays.
-      * @param items Additional items to add to the end of array1.
-      */
+     * Combines two or more arrays.
+     * @param items Additional items to add to the end of array1.
+     */
     concat(...items: ConcatArray<T>[]): T[];
     /**
-      * Combines two or more arrays.
-      * @param items Additional items to add to the end of array1.
-      */
+     * Combines two or more arrays.
+     * @param items Additional items to add to the end of array1.
+     */
     concat(...items: (T | ConcatArray<T>)[]): T[];
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): T[];
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at index 0.
+     */
     indexOf(searchElement: T, fromIndex?: number): number;
     /**
-      * Returns the index of the last occurrence of a specified value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at the last index in the array.
-      */
+     * Returns the index of the last occurrence of a specified value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at the last index in the array.
+     */
     lastIndexOf(searchElement: T, fromIndex?: number): number;
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls the callbackfn function for each element in array1 until the callbackfn returns false, or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => unknown, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every<S extends T>(predicate: (value: T, index: number, array: readonly T[]) => value is S, thisArg?: any): this is readonly S[];
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the callbackfn function for each element in array1 until the callbackfn returns true, or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => unknown, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: T, index: number, array: readonly T[]) => unknown, thisArg?: any): boolean;
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    forEach(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => void, thisArg?: any): void;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: T, index: number, array: readonly T[]) => unknown, thisArg?: any): boolean;
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    map<U>(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => U, thisArg?: any): U[];
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
+     */
+    forEach(callbackfn: (value: T, index: number, array: readonly T[]) => void, thisArg?: any): void;
     /**
-     * Returns the elements of an array that meet the condition specified in a callback function.
-     * @param callbackfn A function that accepts up to three arguments. The filter method calls the callbackfn function one time for each element in the array.
+     * Calls a defined callback function on each element of an array, and returns an array that contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the callbackfn function one time for each element in the array.
      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
      */
-    filter<S extends T>(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => value is S, thisArg?: any): S[];
+    map<U>(callbackfn: (value: T, index: number, array: readonly T[]) => U, thisArg?: any): U[];
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: T, index: number, array: ReadonlyArray<T>) => unknown, thisArg?: any): T[];
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function. If thisArg is omitted, undefined is used as the this value.
+     */
+    filter<S extends T>(predicate: (value: T, index: number, array: readonly T[]) => value is S, thisArg?: any): S[];
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
-    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => T): T;
-    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => T, initialValue: T): T;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function. If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: T, index: number, array: readonly T[]) => unknown, thisArg?: any): T[];
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
-    reduce<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => U, initialValue: U): U;
+     * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
+    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: readonly T[]) => T): T;
+    reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: readonly T[]) => T, initialValue: T): T;
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
-    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => T): T;
-    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => T, initialValue: T): T;
+     * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
+    reduce<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: readonly T[]) => U, initialValue: U): U;
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
-    reduceRight<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: ReadonlyArray<T>) => U, initialValue: U): U;
+     * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
+    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: readonly T[]) => T): T;
+    reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: readonly T[]) => T, initialValue: T): T;
+    /**
+     * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
+    reduceRight<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: readonly T[]) => U, initialValue: U): U;
 
     readonly [n: number]: T;
 }
@@ -4307,151 +4974,171 @@ interface ConcatArray<T> {
 
 interface Array<T> {
     /**
-      * Gets or sets the length of the array. This is a number one higher than the highest element defined in an array.
-      */
+     * Gets or sets the length of the array. This is a number one higher than the highest element defined in an array.
+     */
     length: number;
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
     /**
-      * Returns a string representation of an array. The elements are converted to string using their toLocalString methods.
-      */
+     * Returns a string representation of an array. The elements are converted to string using their toLocalString methods.
+     */
     toLocaleString(): string;
     /**
-      * Removes the last element from an array and returns it.
-      */
+     * Removes the last element from an array and returns it.
+     */
     pop(): T | undefined;
     /**
-      * Appends new elements to an array, and returns the new length of the array.
-      * @param items New elements of the Array.
-      */
+     * Appends new elements to an array, and returns the new length of the array.
+     * @param items New elements of the Array.
+     */
     push(...items: T[]): number;
     /**
-      * Combines two or more arrays.
-      * @param items Additional items to add to the end of array1.
-      */
+     * Combines two or more arrays.
+     * @param items Additional items to add to the end of array1.
+     */
     concat(...items: ConcatArray<T>[]): T[];
     /**
-      * Combines two or more arrays.
-      * @param items Additional items to add to the end of array1.
-      */
+     * Combines two or more arrays.
+     * @param items Additional items to add to the end of array1.
+     */
     concat(...items: (T | ConcatArray<T>)[]): T[];
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): T[];
     /**
-      * Removes the first element from an array and returns it.
-      */
+     * Removes the first element from an array and returns it.
+     */
     shift(): T | undefined;
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): T[];
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: T, b: T) => number): this;
     /**
-      * Removes elements from an array and, if necessary, inserts new elements in their place, returning the deleted elements.
-      * @param start The zero-based location in the array from which to start removing elements.
-      * @param deleteCount The number of elements to remove.
-      */
+     * Removes elements from an array and, if necessary, inserts new elements in their place, returning the deleted elements.
+     * @param start The zero-based location in the array from which to start removing elements.
+     * @param deleteCount The number of elements to remove.
+     */
     splice(start: number, deleteCount?: number): T[];
     /**
-      * Removes elements from an array and, if necessary, inserts new elements in their place, returning the deleted elements.
-      * @param start The zero-based location in the array from which to start removing elements.
-      * @param deleteCount The number of elements to remove.
-      * @param items Elements to insert into the array in place of the deleted elements.
-      */
+     * Removes elements from an array and, if necessary, inserts new elements in their place, returning the deleted elements.
+     * @param start The zero-based location in the array from which to start removing elements.
+     * @param deleteCount The number of elements to remove.
+     * @param items Elements to insert into the array in place of the deleted elements.
+     */
     splice(start: number, deleteCount: number, ...items: T[]): T[];
     /**
-      * Inserts new elements at the start of an array.
-      * @param items  Elements to insert at the start of the Array.
-      */
+     * Inserts new elements at the start of an array.
+     * @param items  Elements to insert at the start of the Array.
+     */
     unshift(...items: T[]): number;
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at index 0.
+     */
     indexOf(searchElement: T, fromIndex?: number): number;
     /**
-      * Returns the index of the last occurrence of a specified value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at the last index in the array.
-      */
+     * Returns the index of the last occurrence of a specified value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the search starts at the last index in the array.
+     */
     lastIndexOf(searchElement: T, fromIndex?: number): number;
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls the callbackfn function for each element in array1 until the callbackfn returns false, or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: T, index: number, array: T[]) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): this is S[];
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the callbackfn function for each element in array1 until the callbackfn returns true, or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: T, index: number, array: T[]) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): boolean;
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): boolean;
+    /**
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: T, index: number, array: T[]) => void, thisArg?: any): void;
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
+     */
     map<U>(callbackfn: (value: T, index: number, array: T[]) => U, thisArg?: any): U[];
     /**
      * Returns the elements of an array that meet the condition specified in a callback function.
-     * @param callbackfn A function that accepts up to three arguments. The filter method calls the callbackfn function one time for each element in the array.
-     * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
+     * @param predicate A function that accepts up to three arguments. The filter method calls the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function. If thisArg is omitted, undefined is used as the this value.
      */
-    filter<S extends T>(callbackfn: (value: T, index: number, array: T[]) => value is S, thisArg?: any): S[];
+    filter<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): S[];
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function. If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: T, index: number, array: T[]) => any, thisArg?: any): T[];
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function. If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: T, index: number, array: T[]) => unknown, thisArg?: any): T[];
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
     reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T): T;
     reduce(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T, initialValue: T): T;
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U, initialValue: U): U;
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T): T;
     reduceRight(callbackfn: (previousValue: T, currentValue: T, currentIndex: number, array: T[]) => T, initialValue: T): T;
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order. The return value of the callback function is the accumulated result, and is provided as an argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start the accumulation. The first call to the callbackfn function provides this value as an argument instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: T, currentIndex: number, array: T[]) => U, initialValue: U): U;
 
     [n: number]: T;
@@ -4464,11 +5151,11 @@ interface ArrayConstructor {
     (arrayLength?: number): any[];
     <T>(arrayLength: number): T[];
     <T>(...items: T[]): T[];
-    isArray(arg: any): arg is Array<any>;
-    readonly prototype: Array<any>;
+    isArray(arg: any): arg is any[];
+    readonly prototype: any[];
 }
 
-declare const Array: ArrayConstructor;
+declare var Array: ArrayConstructor;
 
 interface TypedPropertyDescriptor<T> {
     enumerable?: boolean;
@@ -4567,6 +5254,11 @@ type Exclude<T, U> = T extends U ? never : T;
 type Extract<T, U> = T extends U ? T : never;
 
 /**
+ * Construct a type with the properties of T except for those in type K.
+ */
+type Omit<T, K extends keyof any> = Pick<T, Exclude<keyof T, K>>;
+
+/**
  * Exclude null and undefined from T
  */
 type NonNullable<T> = T extends null | undefined ? never : T;
@@ -4597,20 +5289,20 @@ type InstanceType<T extends new (...args: any) => any> = T extends new (...args:
 interface ThisType<T> { }
 
 /**
-  * Represents a raw buffer of binary data, which is used to store data for the
-  * different typed arrays. ArrayBuffers cannot be read from or written to directly,
-  * but can be passed to a typed array or DataView Object to interpret the raw
-  * buffer as needed.
-  */
+ * Represents a raw buffer of binary data, which is used to store data for the
+ * different typed arrays. ArrayBuffers cannot be read from or written to directly,
+ * but can be passed to a typed array or DataView Object to interpret the raw
+ * buffer as needed.
+ */
 interface ArrayBuffer {
     /**
-      * Read-only. The length of the ArrayBuffer (in bytes).
-      */
+     * Read-only. The length of the ArrayBuffer (in bytes).
+     */
     readonly byteLength: number;
 
     /**
-      * Returns a section of an ArrayBuffer.
-      */
+     * Returns a section of an ArrayBuffer.
+     */
     slice(begin: number, end?: number): ArrayBuffer;
 }
 
@@ -4627,22 +5319,22 @@ interface ArrayBufferConstructor {
     new(byteLength: number): ArrayBuffer;
     isView(arg: any): arg is ArrayBufferView;
 }
-declare const ArrayBuffer: ArrayBufferConstructor;
+declare var ArrayBuffer: ArrayBufferConstructor;
 
 interface ArrayBufferView {
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     byteOffset: number;
 }
 
@@ -4651,371 +5343,378 @@ interface DataView {
     readonly byteLength: number;
     readonly byteOffset: number;
     /**
-      * Gets the Float32 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Float32 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getFloat32(byteOffset: number, littleEndian?: boolean): number;
 
     /**
-      * Gets the Float64 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Float64 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getFloat64(byteOffset: number, littleEndian?: boolean): number;
 
     /**
-      * Gets the Int8 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Int8 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getInt8(byteOffset: number): number;
 
     /**
-      * Gets the Int16 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Int16 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getInt16(byteOffset: number, littleEndian?: boolean): number;
     /**
-      * Gets the Int32 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Int32 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getInt32(byteOffset: number, littleEndian?: boolean): number;
 
     /**
-      * Gets the Uint8 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Uint8 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getUint8(byteOffset: number): number;
 
     /**
-      * Gets the Uint16 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Uint16 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getUint16(byteOffset: number, littleEndian?: boolean): number;
 
     /**
-      * Gets the Uint32 value at the specified byte offset from the start of the view. There is
-      * no alignment constraint; multi-byte values may be fetched from any offset.
-      * @param byteOffset The place in the buffer at which the value should be retrieved.
-      */
+     * Gets the Uint32 value at the specified byte offset from the start of the view. There is
+     * no alignment constraint; multi-byte values may be fetched from any offset.
+     * @param byteOffset The place in the buffer at which the value should be retrieved.
+     */
     getUint32(byteOffset: number, littleEndian?: boolean): number;
 
     /**
-      * Stores an Float32 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Float32 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setFloat32(byteOffset: number, value: number, littleEndian?: boolean): void;
 
     /**
-      * Stores an Float64 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Float64 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setFloat64(byteOffset: number, value: number, littleEndian?: boolean): void;
 
     /**
-      * Stores an Int8 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      */
+     * Stores an Int8 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     */
     setInt8(byteOffset: number, value: number): void;
 
     /**
-      * Stores an Int16 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Int16 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setInt16(byteOffset: number, value: number, littleEndian?: boolean): void;
 
     /**
-      * Stores an Int32 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Int32 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setInt32(byteOffset: number, value: number, littleEndian?: boolean): void;
 
     /**
-      * Stores an Uint8 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      */
+     * Stores an Uint8 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     */
     setUint8(byteOffset: number, value: number): void;
 
     /**
-      * Stores an Uint16 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Uint16 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setUint16(byteOffset: number, value: number, littleEndian?: boolean): void;
 
     /**
-      * Stores an Uint32 value at the specified byte offset from the start of the view.
-      * @param byteOffset The place in the buffer at which the value should be set.
-      * @param value The value to set.
-      * @param littleEndian If false or undefined, a big-endian value should be written,
-      * otherwise a little-endian value should be written.
-      */
+     * Stores an Uint32 value at the specified byte offset from the start of the view.
+     * @param byteOffset The place in the buffer at which the value should be set.
+     * @param value The value to set.
+     * @param littleEndian If false or undefined, a big-endian value should be written,
+     * otherwise a little-endian value should be written.
+     */
     setUint32(byteOffset: number, value: number, littleEndian?: boolean): void;
 }
 
 interface DataViewConstructor {
     new(buffer: ArrayBufferLike, byteOffset?: number, byteLength?: number): DataView;
 }
-declare const DataView: DataViewConstructor;
+declare var DataView: DataViewConstructor;
 
 /**
-  * A typed array of 8-bit integer values. The contents are initialized to 0. If the requested
-  * number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 8-bit integer values. The contents are initialized to 0. If the requested
+ * number of bytes could not be allocated an exception is raised.
+ */
 interface Int8Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Int8Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Int8Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Int8Array) => any, thisArg?: any): Int8Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Int8Array) => any, thisArg?: any): Int8Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Int8Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Int8Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Int8Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Int8Array) => number, thisArg?: any): Int8Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int8Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int8Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int8Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int8Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int8Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int8Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Int8Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Int8Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Int8Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Int8Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Int8Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Int8Array;
+     * Gets a new Int8Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Int8Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Int8Array;
 
     [index: number]: number;
 }
@@ -5026,271 +5725,278 @@ interface Int8ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Int8Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Int8Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Int8Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Int8Array;
 
 
 }
-declare const Int8Array: Int8ArrayConstructor;
+declare var Int8Array: Int8ArrayConstructor;
 
 /**
-  * A typed array of 8-bit unsigned integer values. The contents are initialized to 0. If the
-  * requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 8-bit unsigned integer values. The contents are initialized to 0. If the
+ * requested number of bytes could not be allocated an exception is raised.
+ */
 interface Uint8Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Uint8Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Uint8Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Uint8Array) => any, thisArg?: any): Uint8Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Uint8Array) => any, thisArg?: any): Uint8Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Uint8Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Uint8Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Uint8Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Uint8Array) => number, thisArg?: any): Uint8Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint8Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint8Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Uint8Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Uint8Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Uint8Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Uint8Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Uint8Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Uint8Array;
+     * Gets a new Uint8Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Uint8Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Uint8Array;
 
     [index: number]: number;
 }
@@ -5302,270 +6008,277 @@ interface Uint8ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Uint8Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Uint8Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Uint8Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Uint8Array;
 
 }
-declare const Uint8Array: Uint8ArrayConstructor;
+declare var Uint8Array: Uint8ArrayConstructor;
 
 /**
-  * A typed array of 8-bit unsigned integer (clamped) values. The contents are initialized to 0.
-  * If the requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 8-bit unsigned integer (clamped) values. The contents are initialized to 0.
+ * If the requested number of bytes could not be allocated an exception is raised.
+ */
 interface Uint8ClampedArray {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Uint8ClampedArray) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Uint8ClampedArray) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Uint8ClampedArray) => any, thisArg?: any): Uint8ClampedArray;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Uint8ClampedArray) => any, thisArg?: any): Uint8ClampedArray;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Uint8ClampedArray) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Uint8ClampedArray) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Uint8ClampedArray) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Uint8ClampedArray) => number, thisArg?: any): Uint8ClampedArray;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint8ClampedArray) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Uint8ClampedArray;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Uint8ClampedArray;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Uint8ClampedArray) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Uint8ClampedArray) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Uint8ClampedArray view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Uint8ClampedArray;
+     * Gets a new Uint8ClampedArray view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Uint8ClampedArray;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Uint8ClampedArray;
 
     [index: number]: number;
 }
@@ -5577,268 +6290,275 @@ interface Uint8ClampedArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Uint8ClampedArray;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Uint8ClampedArray;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Uint8ClampedArray;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Uint8ClampedArray;
 }
-declare const Uint8ClampedArray: Uint8ClampedArrayConstructor;
+declare var Uint8ClampedArray: Uint8ClampedArrayConstructor;
 
 /**
-  * A typed array of 16-bit signed integer values. The contents are initialized to 0. If the
-  * requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 16-bit signed integer values. The contents are initialized to 0. If the
+ * requested number of bytes could not be allocated an exception is raised.
+ */
 interface Int16Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Int16Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Int16Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Int16Array) => any, thisArg?: any): Int16Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Int16Array) => any, thisArg?: any): Int16Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Int16Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Int16Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Int16Array) => void, thisArg?: any): void;
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Int16Array) => number, thisArg?: any): Int16Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int16Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int16Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int16Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int16Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int16Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int16Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Int16Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Int16Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Int16Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Int16Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Int16Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Int16Array;
+     * Gets a new Int16Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Int16Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Int16Array;
 
     [index: number]: number;
 }
@@ -5850,271 +6570,278 @@ interface Int16ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Int16Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Int16Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Int16Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Int16Array;
 
 
 }
-declare const Int16Array: Int16ArrayConstructor;
+declare var Int16Array: Int16ArrayConstructor;
 
 /**
-  * A typed array of 16-bit unsigned integer values. The contents are initialized to 0. If the
-  * requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 16-bit unsigned integer values. The contents are initialized to 0. If the
+ * requested number of bytes could not be allocated an exception is raised.
+ */
 interface Uint16Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Uint16Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Uint16Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Uint16Array) => any, thisArg?: any): Uint16Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Uint16Array) => any, thisArg?: any): Uint16Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Uint16Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Uint16Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Uint16Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Uint16Array) => number, thisArg?: any): Uint16Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint16Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint16Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint16Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint16Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint16Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint16Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Uint16Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Uint16Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Uint16Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Uint16Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Uint16Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Uint16Array;
+     * Gets a new Uint16Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Uint16Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Uint16Array;
 
     [index: number]: number;
 }
@@ -6126,270 +6853,277 @@ interface Uint16ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Uint16Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Uint16Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Uint16Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Uint16Array;
 
 
 }
-declare const Uint16Array: Uint16ArrayConstructor;
+declare var Uint16Array: Uint16ArrayConstructor;
 /**
-  * A typed array of 32-bit signed integer values. The contents are initialized to 0. If the
-  * requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 32-bit signed integer values. The contents are initialized to 0. If the
+ * requested number of bytes could not be allocated an exception is raised.
+ */
 interface Int32Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Int32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Int32Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Int32Array) => any, thisArg?: any): Int32Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Int32Array) => any, thisArg?: any): Int32Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Int32Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Int32Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Int32Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Int32Array) => number, thisArg?: any): Int32Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int32Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int32Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int32Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Int32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Int32Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Int32Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Int32Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Int32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Int32Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Int32Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Int32Array;
+     * Gets a new Int32Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Int32Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Int32Array;
 
     [index: number]: number;
 }
@@ -6401,269 +7135,276 @@ interface Int32ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Int32Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Int32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Int32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Int32Array;
 
 }
-declare const Int32Array: Int32ArrayConstructor;
+declare var Int32Array: Int32ArrayConstructor;
 
 /**
-  * A typed array of 32-bit unsigned integer values. The contents are initialized to 0. If the
-  * requested number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 32-bit unsigned integer values. The contents are initialized to 0. If the
+ * requested number of bytes could not be allocated an exception is raised.
+ */
 interface Uint32Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Uint32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Uint32Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Uint32Array) => any, thisArg?: any): Uint32Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Uint32Array) => any, thisArg?: any): Uint32Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Uint32Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Uint32Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Uint32Array) => void, thisArg?: any): void;
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Uint32Array) => number, thisArg?: any): Uint32Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint32Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint32Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint32Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Uint32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Uint32Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Uint32Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Uint32Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Uint32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Uint32Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Uint32Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Uint32Array;
+     * Gets a new Uint32Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Uint32Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Uint32Array;
 
     [index: number]: number;
 }
@@ -6675,270 +7416,277 @@ interface Uint32ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Uint32Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Uint32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Uint32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Uint32Array;
 
 }
-declare const Uint32Array: Uint32ArrayConstructor;
+declare var Uint32Array: Uint32ArrayConstructor;
 
 /**
-  * A typed array of 32-bit float values. The contents are initialized to 0. If the requested number
-  * of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 32-bit float values. The contents are initialized to 0. If the requested number
+ * of bytes could not be allocated an exception is raised.
+ */
 interface Float32Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Float32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Float32Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Float32Array) => any, thisArg?: any): Float32Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Float32Array) => any, thisArg?: any): Float32Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Float32Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Float32Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Float32Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Float32Array) => number, thisArg?: any): Float32Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float32Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Float32Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float32Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float32Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Float32Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Float32Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Float32Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Float32Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Float32Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Float32Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Float32Array;
+     * Gets a new Float32Array view of the ArrayBuffer store for this array, referencing the elements
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Float32Array;
 
     /**
-      * Converts a number to a string by using the current locale.
-      */
+     * Converts a number to a string by using the current locale.
+     */
     toLocaleString(): string;
 
     /**
-      * Returns a string representation of an array.
-      */
+     * Returns a string representation of an array.
+     */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Float32Array;
 
     [index: number]: number;
 }
@@ -6950,271 +7698,269 @@ interface Float32ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Float32Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Float32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Float32Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Float32Array;
 
 
 }
-declare const Float32Array: Float32ArrayConstructor;
+declare var Float32Array: Float32ArrayConstructor;
 
 /**
-  * A typed array of 64-bit float values. The contents are initialized to 0. If the requested
-  * number of bytes could not be allocated an exception is raised.
-  */
+ * A typed array of 64-bit float values. The contents are initialized to 0. If the requested
+ * number of bytes could not be allocated an exception is raised.
+ */
 interface Float64Array {
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * The ArrayBuffer instance referenced by the array.
-      */
+     * The ArrayBuffer instance referenced by the array.
+     */
     readonly buffer: ArrayBufferLike;
 
     /**
-      * The length in bytes of the array.
-      */
+     * The length in bytes of the array.
+     */
     readonly byteLength: number;
 
     /**
-      * The offset in bytes of the array.
-      */
+     * The offset in bytes of the array.
+     */
     readonly byteOffset: number;
 
     /**
-      * Returns the this object after copying a section of the array identified by start and end
-      * to the same array starting at position target
-      * @param target If target is negative, it is treated as length+target where length is the
-      * length of the array.
-      * @param start If start is negative, it is treated as length+start. If end is negative, it
-      * is treated as length+end.
-      * @param end If not specified, length of the this object is used as its default value.
-      */
+     * Returns the this object after copying a section of the array identified by start and end
+     * to the same array starting at position target
+     * @param target If target is negative, it is treated as length+target where length is the
+     * length of the array.
+     * @param start If start is negative, it is treated as length+start. If end is negative, it
+     * is treated as length+end.
+     * @param end If not specified, length of the this object is used as its default value.
+     */
     copyWithin(target: number, start: number, end?: number): this;
 
     /**
-      * Determines whether all the members of an array satisfy the specified test.
-      * @param callbackfn A function that accepts up to three arguments. The every method calls
-      * the callbackfn function for each element in array1 until the callbackfn returns false,
-      * or until the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    every(callbackfn: (value: number, index: number, array: Float64Array) => boolean, thisArg?: any): boolean;
+     * Determines whether all the members of an array satisfy the specified test.
+     * @param predicate A function that accepts up to three arguments. The every method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value false, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    every(predicate: (value: number, index: number, array: Float64Array) => unknown, thisArg?: any): boolean;
 
     /**
-        * Returns the this object after filling the section identified by start and end with value
-        * @param value value to fill array section with
-        * @param start index to start filling the array at. If start is negative, it is treated as
-        * length+start where length is the length of the array.
-        * @param end index to stop filling the array at. If end is negative, it is treated as
-        * length+end.
-        */
+     * Returns the this object after filling the section identified by start and end with value
+     * @param value value to fill array section with
+     * @param start index to start filling the array at. If start is negative, it is treated as
+     * length+start where length is the length of the array.
+     * @param end index to stop filling the array at. If end is negative, it is treated as
+     * length+end.
+     */
     fill(value: number, start?: number, end?: number): this;
 
     /**
-      * Returns the elements of an array that meet the condition specified in a callback function.
-      * @param callbackfn A function that accepts up to three arguments. The filter method calls
-      * the callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    filter(callbackfn: (value: number, index: number, array: Float64Array) => any, thisArg?: any): Float64Array;
+     * Returns the elements of an array that meet the condition specified in a callback function.
+     * @param predicate A function that accepts up to three arguments. The filter method calls
+     * the predicate function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    filter(predicate: (value: number, index: number, array: Float64Array) => any, thisArg?: any): Float64Array;
 
     /**
-      * Returns the value of the first element in the array where predicate is true, and undefined
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found, find
-      * immediately returns that element value. Otherwise, find returns undefined.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the value of the first element in the array where predicate is true, and undefined
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found, find
+     * immediately returns that element value. Otherwise, find returns undefined.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     find(predicate: (value: number, index: number, obj: Float64Array) => boolean, thisArg?: any): number | undefined;
 
     /**
-      * Returns the index of the first element in the array where predicate is true, and -1
-      * otherwise.
-      * @param predicate find calls predicate once for each element of the array, in ascending
-      * order, until it finds one where predicate returns true. If such an element is found,
-      * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
-      * @param thisArg If provided, it will be used as the this value for each invocation of
-      * predicate. If it is not provided, undefined is used instead.
-      */
+     * Returns the index of the first element in the array where predicate is true, and -1
+     * otherwise.
+     * @param predicate find calls predicate once for each element of the array, in ascending
+     * order, until it finds one where predicate returns true. If such an element is found,
+     * findIndex immediately returns that element index. Otherwise, findIndex returns -1.
+     * @param thisArg If provided, it will be used as the this value for each invocation of
+     * predicate. If it is not provided, undefined is used instead.
+     */
     findIndex(predicate: (value: number, index: number, obj: Float64Array) => boolean, thisArg?: any): number;
 
     /**
-      * Performs the specified action for each element in an array.
-      * @param callbackfn  A function that accepts up to three arguments. forEach calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Performs the specified action for each element in an array.
+     * @param callbackfn  A function that accepts up to three arguments. forEach calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg  An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     forEach(callbackfn: (value: number, index: number, array: Float64Array) => void, thisArg?: any): void;
 
     /**
-      * Returns the index of the first occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      *  search starts at index 0.
-      */
+     * Returns the index of the first occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     *  search starts at index 0.
+     */
     indexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * Adds all the elements of an array separated by the specified separator string.
-      * @param separator A string used to separate one element of an array from the next in the
-      * resulting String. If omitted, the array elements are separated with a comma.
-      */
+     * Adds all the elements of an array separated by the specified separator string.
+     * @param separator A string used to separate one element of an array from the next in the
+     * resulting String. If omitted, the array elements are separated with a comma.
+     */
     join(separator?: string): string;
 
     /**
-      * Returns the index of the last occurrence of a value in an array.
-      * @param searchElement The value to locate in the array.
-      * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
-      * search starts at index 0.
-      */
+     * Returns the index of the last occurrence of a value in an array.
+     * @param searchElement The value to locate in the array.
+     * @param fromIndex The array index at which to begin the search. If fromIndex is omitted, the
+     * search starts at index 0.
+     */
     lastIndexOf(searchElement: number, fromIndex?: number): number;
 
     /**
-      * The length of the array.
-      */
+     * The length of the array.
+     */
     readonly length: number;
 
     /**
-      * Calls a defined callback function on each element of an array, and returns an array that
-      * contains the results.
-      * @param callbackfn A function that accepts up to three arguments. The map method calls the
-      * callbackfn function one time for each element in the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
+     * Calls a defined callback function on each element of an array, and returns an array that
+     * contains the results.
+     * @param callbackfn A function that accepts up to three arguments. The map method calls the
+     * callbackfn function one time for each element in the array.
+     * @param thisArg An object to which the this keyword can refer in the callbackfn function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
     map(callbackfn: (value: number, index: number, array: Float64Array) => number, thisArg?: any): Float64Array;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float64Array) => number): number;
     reduce(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float64Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array. The return value of
-      * the callback function is the accumulated result, and is provided as an argument in the next
-      * call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
-      * callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array. The return value of
+     * the callback function is the accumulated result, and is provided as an argument in the next
+     * call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduce method calls the
+     * callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduce<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Float64Array) => U, initialValue: U): U;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an
-      * argument instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an
+     * argument instead of an array value.
+     */
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float64Array) => number): number;
     reduceRight(callbackfn: (previousValue: number, currentValue: number, currentIndex: number, array: Float64Array) => number, initialValue: number): number;
 
     /**
-      * Calls the specified callback function for all the elements in an array, in descending order.
-      * The return value of the callback function is the accumulated result, and is provided as an
-      * argument in the next call to the callback function.
-      * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
-      * the callbackfn function one time for each element in the array.
-      * @param initialValue If initialValue is specified, it is used as the initial value to start
-      * the accumulation. The first call to the callbackfn function provides this value as an argument
-      * instead of an array value.
-      */
+     * Calls the specified callback function for all the elements in an array, in descending order.
+     * The return value of the callback function is the accumulated result, and is provided as an
+     * argument in the next call to the callback function.
+     * @param callbackfn A function that accepts up to four arguments. The reduceRight method calls
+     * the callbackfn function one time for each element in the array.
+     * @param initialValue If initialValue is specified, it is used as the initial value to start
+     * the accumulation. The first call to the callbackfn function provides this value as an argument
+     * instead of an array value.
+     */
     reduceRight<U>(callbackfn: (previousValue: U, currentValue: number, currentIndex: number, array: Float64Array) => U, initialValue: U): U;
 
     /**
-      * Reverses the elements in an Array.
-      */
+     * Reverses the elements in an Array.
+     */
     reverse(): Float64Array;
 
     /**
-      * Sets a value or an array of values.
-      * @param array A typed or untyped array of values to set.
-      * @param offset The index in the current array at which the values are to be written.
-      */
+     * Sets a value or an array of values.
+     * @param array A typed or untyped array of values to set.
+     * @param offset The index in the current array at which the values are to be written.
+     */
     set(array: ArrayLike<number>, offset?: number): void;
 
     /**
-      * Returns a section of an array.
-      * @param start The beginning of the specified portion of the array.
-      * @param end The end of the specified portion of the array.
-      */
+     * Returns a section of an array.
+     * @param start The beginning of the specified portion of the array.
+     * @param end The end of the specified portion of the array. This is exclusive of the element at the index 'end'.
+     */
     slice(start?: number, end?: number): Float64Array;
 
     /**
-      * Determines whether the specified callback function returns true for any element of an array.
-      * @param callbackfn A function that accepts up to three arguments. The some method calls the
-      * callbackfn function for each element in array1 until the callbackfn returns true, or until
-      * the end of the array.
-      * @param thisArg An object to which the this keyword can refer in the callbackfn function.
-      * If thisArg is omitted, undefined is used as the this value.
-      */
-    some(callbackfn: (value: number, index: number, array: Float64Array) => boolean, thisArg?: any): boolean;
+     * Determines whether the specified callback function returns true for any element of an array.
+     * @param predicate A function that accepts up to three arguments. The some method calls
+     * the predicate function for each element in the array until the predicate returns a value
+     * which is coercible to the Boolean value true, or until the end of the array.
+     * @param thisArg An object to which the this keyword can refer in the predicate function.
+     * If thisArg is omitted, undefined is used as the this value.
+     */
+    some(predicate: (value: number, index: number, array: Float64Array) => unknown, thisArg?: any): boolean;
 
     /**
-      * Sorts an array.
-      * @param compareFn The name of the function used to determine the order of the elements. If
-      * omitted, the elements are sorted in ascending, ASCII character order.
-      */
+     * Sorts an array.
+     * @param compareFn Function used to determine the order of the elements. It is expected to return
+     * a negative value if first argument is less than second argument, zero if they're equal and a positive
+     * value otherwise. If omitted, the elements are sorted in ascending, ASCII character order.
+     * \`\`\`ts
+     * [11,2,22,1].sort((a, b) => a - b)
+     * \`\`\`
+     */
     sort(compareFn?: (a: number, b: number) => number): this;
 
     /**
-      * Gets a new Float64Array view of the ArrayBuffer store for this array, referencing the elements
-      * at begin, inclusive, up to end, exclusive.
-      * @param begin The index of the beginning of the array.
-      * @param end The index of the end of the array.
-      */
-    subarray(begin: number, end?: number): Float64Array;
+     * at begin, inclusive, up to end, exclusive.
+     * @param begin The index of the beginning of the array.
+     * @param end The index of the end of the array.
+     */
+    subarray(begin?: number, end?: number): Float64Array;
 
-    /**
-      * Converts a number to a string by using the current locale.
-      */
-    toLocaleString(): string;
-
-    /**
-      * Returns a string representation of an array.
-      */
     toString(): string;
+
+    /** Returns the primitive value of the specified object. */
+    valueOf(): Float64Array;
 
     [index: number]: number;
 }
@@ -7226,32 +7972,32 @@ interface Float64ArrayConstructor {
     new(buffer: ArrayBufferLike, byteOffset: number, length?: number): Float64Array;
 
     /**
-      * The size in bytes of each element in the array.
-      */
+     * The size in bytes of each element in the array.
+     */
     readonly BYTES_PER_ELEMENT: number;
 
     /**
-      * Returns a new array from a set of elements.
-      * @param items A set of elements to include in the new array object.
-      */
+     * Returns a new array from a set of elements.
+     * @param items A set of elements to include in the new array object.
+     */
     of(...items: number[]): Float64Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     */
     from(arrayLike: ArrayLike<number>): Float64Array;
 
     /**
-      * Creates an array from an array-like or iterable object.
-      * @param arrayLike An array-like or iterable object to convert to an array.
-      * @param mapfn A mapping function to call on every element of the array.
-      * @param thisArg Value of 'this' used to invoke the mapfn.
-      */
+     * Creates an array from an array-like or iterable object.
+     * @param arrayLike An array-like or iterable object to convert to an array.
+     * @param mapfn A mapping function to call on every element of the array.
+     * @param thisArg Value of 'this' used to invoke the mapfn.
+     */
     from<T>(arrayLike: ArrayLike<T>, mapfn: (v: T, k: number) => number, thisArg?: any): Float64Array;
 
 }
-declare const Float64Array: Float64ArrayConstructor;
+declare var Float64Array: Float64ArrayConstructor;
 
 /////////////////////////////
 /// ECMAScript Internationalization API
@@ -7370,56 +8116,56 @@ declare namespace Intl {
 
 interface String {
     /**
-      * Determines whether two strings are equivalent in the current or specified locale.
-      * @param that String to compare to target string
-      * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used. This parameter must conform to BCP 47 standards; see the Intl.Collator object for details.
-      * @param options An object that contains one or more properties that specify comparison options. see the Intl.Collator object for details.
-      */
+     * Determines whether two strings are equivalent in the current or specified locale.
+     * @param that String to compare to target string
+     * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used. This parameter must conform to BCP 47 standards; see the Intl.Collator object for details.
+     * @param options An object that contains one or more properties that specify comparison options. see the Intl.Collator object for details.
+     */
     localeCompare(that: string, locales?: string | string[], options?: Intl.CollatorOptions): number;
 }
 
 interface Number {
     /**
-      * Converts a number to a string by using the current or specified locale.
-      * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
-      * @param options An object that contains one or more properties that specify comparison options.
-      */
+     * Converts a number to a string by using the current or specified locale.
+     * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
+     * @param options An object that contains one or more properties that specify comparison options.
+     */
     toLocaleString(locales?: string | string[], options?: Intl.NumberFormatOptions): string;
 }
 
 interface Date {
     /**
-      * Converts a date and time to a string by using the current or specified locale.
-      * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
-      * @param options An object that contains one or more properties that specify comparison options.
-      */
+     * Converts a date and time to a string by using the current or specified locale.
+     * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
+     * @param options An object that contains one or more properties that specify comparison options.
+     */
     toLocaleString(locales?: string | string[], options?: Intl.DateTimeFormatOptions): string;
     /**
-      * Converts a date to a string by using the current or specified locale.
-      * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
-      * @param options An object that contains one or more properties that specify comparison options.
-      */
+     * Converts a date to a string by using the current or specified locale.
+     * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
+     * @param options An object that contains one or more properties that specify comparison options.
+     */
     toLocaleDateString(locales?: string | string[], options?: Intl.DateTimeFormatOptions): string;
 
     /**
-      * Converts a time to a string by using the current or specified locale.
-      * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
-      * @param options An object that contains one or more properties that specify comparison options.
-      */
+     * Converts a time to a string by using the current or specified locale.
+     * @param locales A locale string or array of locale strings that contain one or more language or locale tags. If you include more than one locale string, list them in descending order of priority so that the first entry is the preferred locale. If you omit this parameter, the default locale of the JavaScript runtime is used.
+     * @param options An object that contains one or more properties that specify comparison options.
+     */
     toLocaleTimeString(locales?: string | string[], options?: Intl.DateTimeFormatOptions): string;
 }
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -7440,7 +8186,7 @@ interface Array<T> {
      * predicate. If it is not provided, undefined is used instead.
      */
     find<S extends T>(predicate: (this: void, value: T, index: number, obj: T[]) => value is S, thisArg?: any): S | undefined;
-    find(predicate: (value: T, index: number, obj: T[]) => boolean, thisArg?: any): T | undefined;
+    find(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): T | undefined;
 
     /**
      * Returns the index of the first element in the array where predicate is true, and -1
@@ -7451,7 +8197,7 @@ interface Array<T> {
      * @param thisArg If provided, it will be used as the this value for each invocation of
      * predicate. If it is not provided, undefined is used instead.
      */
-    findIndex(predicate: (value: T, index: number, obj: T[]) => boolean, thisArg?: any): number;
+    findIndex(predicate: (value: T, index: number, obj: T[]) => unknown, thisArg?: any): number;
 
     /**
      * Returns the this object after filling the section identified by start and end with value
@@ -7635,13 +8381,13 @@ interface NumberConstructor {
      * number. Only finite values of the type number, result in true.
      * @param number A numeric value.
      */
-    isFinite(number: number): boolean;
+    isFinite(number: unknown): boolean;
 
     /**
      * Returns true if the value passed is an integer, false otherwise.
      * @param number A numeric value.
      */
-    isInteger(number: number): boolean;
+    isInteger(number: unknown): boolean;
 
     /**
      * Returns a Boolean value that indicates whether a value is the reserved value NaN (not a
@@ -7649,13 +8395,13 @@ interface NumberConstructor {
      * to a number. Only values of the type number, that are also NaN, result in true.
      * @param number A numeric value.
      */
-    isNaN(number: number): boolean;
+    isNaN(number: unknown): boolean;
 
     /**
      * Returns true if the value passed is a safe integer.
      * @param number A numeric value.
      */
-    isSafeInteger(number: number): boolean;
+    isSafeInteger(number: unknown): boolean;
 
     /**
      * The value of the largest integer n such that n and n + 1 are both exactly representable as
@@ -7730,6 +8476,12 @@ interface ObjectConstructor {
     getOwnPropertySymbols(o: any): symbol[];
 
     /**
+     * Returns the names of the enumerable string properties and methods of an object.
+     * @param o Object that contains the properties and methods. This can be an object that you created or an existing Document Object Model (DOM) object.
+     */
+    keys(o: {}): string[];
+
+    /**
      * Returns true if the values are the same value, false otherwise.
      * @param value1 The first value.
      * @param value2 The second value.
@@ -7737,7 +8489,7 @@ interface ObjectConstructor {
     is(value1: any, value2: any): boolean;
 
     /**
-     * Sets the prototype of a specified object o to  object proto or null. Returns the object o.
+     * Sets the prototype of a specified object o to object proto or null. Returns the object o.
      * @param o The object to change its prototype.
      * @param proto The value of the new prototype or null.
      */
@@ -7754,8 +8506,8 @@ interface ReadonlyArray<T> {
      * @param thisArg If provided, it will be used as the this value for each invocation of
      * predicate. If it is not provided, undefined is used instead.
      */
-    find<S extends T>(predicate: (this: void, value: T, index: number, obj: ReadonlyArray<T>) => value is S, thisArg?: any): S | undefined;
-    find(predicate: (value: T, index: number, obj: ReadonlyArray<T>) => boolean, thisArg?: any): T | undefined;
+    find<S extends T>(predicate: (this: void, value: T, index: number, obj: readonly T[]) => value is S, thisArg?: any): S | undefined;
+    find(predicate: (value: T, index: number, obj: readonly T[]) => unknown, thisArg?: any): T | undefined;
 
     /**
      * Returns the index of the first element in the array where predicate is true, and -1
@@ -7766,7 +8518,7 @@ interface ReadonlyArray<T> {
      * @param thisArg If provided, it will be used as the this value for each invocation of
      * predicate. If it is not provided, undefined is used instead.
      */
-    findIndex(predicate: (value: T, index: number, obj: ReadonlyArray<T>) => boolean, thisArg?: any): number;
+    findIndex(predicate: (value: T, index: number, obj: readonly T[]) => unknown, thisArg?: any): number;
 }
 
 interface RegExp {
@@ -7798,8 +8550,8 @@ interface RegExp {
 }
 
 interface RegExpConstructor {
-    new (pattern: RegExp, flags?: string): RegExp;
-    (pattern: RegExp, flags?: string): RegExp;
+    new (pattern: RegExp | string, flags?: string): RegExp;
+    (pattern: RegExp | string, flags?: string): RegExp;
 }
 
 interface String {
@@ -7859,48 +8611,48 @@ interface String {
     startsWith(searchString: string, position?: number): boolean;
 
     /**
-     * Returns an <a> HTML anchor element and sets the name attribute to the text value
+     * Returns an \`<a>\` HTML anchor element and sets the name attribute to the text value
      * @param name
      */
     anchor(name: string): string;
 
-    /** Returns a <big> HTML element */
+    /** Returns a \`<big>\` HTML element */
     big(): string;
 
-    /** Returns a <blink> HTML element */
+    /** Returns a \`<blink>\` HTML element */
     blink(): string;
 
-    /** Returns a <b> HTML element */
+    /** Returns a \`<b>\` HTML element */
     bold(): string;
 
-    /** Returns a <tt> HTML element */
+    /** Returns a \`<tt>\` HTML element */
     fixed(): string;
 
-    /** Returns a <font> HTML element and sets the color attribute value */
+    /** Returns a \`<font>\` HTML element and sets the color attribute value */
     fontcolor(color: string): string;
 
-    /** Returns a <font> HTML element and sets the size attribute value */
+    /** Returns a \`<font>\` HTML element and sets the size attribute value */
     fontsize(size: number): string;
 
-    /** Returns a <font> HTML element and sets the size attribute value */
+    /** Returns a \`<font>\` HTML element and sets the size attribute value */
     fontsize(size: string): string;
 
-    /** Returns an <i> HTML element */
+    /** Returns an \`<i>\` HTML element */
     italics(): string;
 
-    /** Returns an <a> HTML element and sets the href attribute value */
+    /** Returns an \`<a>\` HTML element and sets the href attribute value */
     link(url: string): string;
 
-    /** Returns a <small> HTML element */
+    /** Returns a \`<small>\` HTML element */
     small(): string;
 
-    /** Returns a <strike> HTML element */
+    /** Returns a \`<strike>\` HTML element */
     strike(): string;
 
-    /** Returns a <sub> HTML element */
+    /** Returns a \`<sub>\` HTML element */
     sub(): string;
 
-    /** Returns a <sup> HTML element */
+    /** Returns a \`<sup>\` HTML element */
     sup(): string;
 }
 
@@ -7922,16 +8674,16 @@ interface StringConstructor {
 }
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -7953,7 +8705,7 @@ interface Map<K, V> {
 
 interface MapConstructor {
     new(): Map<any, any>;
-    new<K, V>(entries?: ReadonlyArray<[K, V]> | null): Map<K, V>;
+    new<K, V>(entries?: readonly (readonly [K, V])[] | null): Map<K, V>;
     readonly prototype: Map<any, any>;
 }
 declare var Map: MapConstructor;
@@ -7973,7 +8725,7 @@ interface WeakMap<K extends object, V> {
 }
 
 interface WeakMapConstructor {
-    new <K extends object = object, V = any>(entries?: ReadonlyArray<[K, V]> | null): WeakMap<K, V>;
+    new <K extends object = object, V = any>(entries?: readonly [K, V][] | null): WeakMap<K, V>;
     readonly prototype: WeakMap<object, any>;
 }
 declare var WeakMap: WeakMapConstructor;
@@ -7988,7 +8740,7 @@ interface Set<T> {
 }
 
 interface SetConstructor {
-    new <T = any>(values?: ReadonlyArray<T> | null): Set<T>;
+    new <T = any>(values?: readonly T[] | null): Set<T>;
     readonly prototype: Set<any>;
 }
 declare var Set: SetConstructor;
@@ -8006,22 +8758,22 @@ interface WeakSet<T extends object> {
 }
 
 interface WeakSetConstructor {
-    new <T extends object = object>(values?: ReadonlyArray<T> | null): WeakSet<T>;
+    new <T extends object = object>(values?: readonly T[] | null): WeakSet<T>;
     readonly prototype: WeakSet<object>;
 }
 declare var WeakSet: WeakSetConstructor;
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8031,7 +8783,15 @@ and limitations under the License.
 /// <reference no-default-lib="true"/>
 
 
-interface Generator extends Iterator<any> { }
+/// <reference lib="es2015.iterable" />
+
+interface Generator<T = unknown, TReturn = any, TNext = unknown> extends Iterator<T, TReturn, TNext> {
+    // NOTE: 'next' is defined using a tuple to ensure we report the correct assignability errors in all places.
+    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
+    return(value: TReturn): IteratorResult<T, TReturn>;
+    throw(e: any): IteratorResult<T, TReturn>;
+    [Symbol.iterator](): Generator<T, TReturn, TNext>;
+}
 
 interface GeneratorFunction {
     /**
@@ -8084,16 +8844,16 @@ interface GeneratorFunctionConstructor {
 }
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8123,7 +8883,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>, T10 | PromiseLike<T10>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]>;
+    all<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>, T10 | PromiseLike<T10>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9, T10]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8131,7 +8891,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5, T6, T7, T8, T9>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9]>;
+    all<T1, T2, T3, T4, T5, T6, T7, T8, T9>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8, T9]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8139,7 +8899,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5, T6, T7, T8>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8]>;
+    all<T1, T2, T3, T4, T5, T6, T7, T8>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>]): Promise<[T1, T2, T3, T4, T5, T6, T7, T8]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8147,7 +8907,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5, T6, T7>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>]): Promise<[T1, T2, T3, T4, T5, T6, T7]>;
+    all<T1, T2, T3, T4, T5, T6, T7>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>]): Promise<[T1, T2, T3, T4, T5, T6, T7]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8155,7 +8915,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5, T6>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>]): Promise<[T1, T2, T3, T4, T5, T6]>;
+    all<T1, T2, T3, T4, T5, T6>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>]): Promise<[T1, T2, T3, T4, T5, T6]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8163,7 +8923,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4, T5>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>, T5 | PromiseLike<T5>]): Promise<[T1, T2, T3, T4, T5]>;
+    all<T1, T2, T3, T4, T5>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>]): Promise<[T1, T2, T3, T4, T5]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8171,7 +8931,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3, T4>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike <T4>]): Promise<[T1, T2, T3, T4]>;
+    all<T1, T2, T3, T4>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>]): Promise<[T1, T2, T3, T4]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8179,7 +8939,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2, T3>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>]): Promise<[T1, T2, T3]>;
+    all<T1, T2, T3>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>]): Promise<[T1, T2, T3]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8187,7 +8947,7 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T1, T2>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>]): Promise<[T1, T2]>;
+    all<T1, T2>(values: readonly [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>]): Promise<[T1, T2]>;
 
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
@@ -8195,7 +8955,10 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    all<T>(values: (T | PromiseLike<T>)[]): Promise<T[]>;
+    all<T>(values: readonly (T | PromiseLike<T>)[]): Promise<T[]>;
+
+    // see: lib.es2015.iterable.d.ts
+    // all<T>(values: Iterable<T | PromiseLike<T>>): Promise<T[]>;
 
     /**
      * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
@@ -8203,79 +8966,10 @@ interface PromiseConstructor {
      * @param values An array of Promises.
      * @returns A new Promise.
      */
-    race<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>, T10 | PromiseLike<T10>]): Promise<T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9 | T10>;
+    race<T>(values: readonly T[]): Promise<T extends PromiseLike<infer U> ? U : T>;
 
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4, T5, T6, T7, T8, T9>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>, T9 | PromiseLike<T9>]): Promise<T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8 | T9>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4, T5, T6, T7, T8>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>, T8 | PromiseLike<T8>]): Promise<T1 | T2 | T3 | T4 | T5 | T6 | T7 | T8>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4, T5, T6, T7>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>, T7 | PromiseLike<T7>]): Promise<T1 | T2 | T3 | T4 | T5 | T6 | T7>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4, T5, T6>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>, T6 | PromiseLike<T6>]): Promise<T1 | T2 | T3 | T4 | T5 | T6>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4, T5>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>, T5 | PromiseLike<T5>]): Promise<T1 | T2 | T3 | T4 | T5>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3, T4>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>, T4 | PromiseLike<T4>]): Promise<T1 | T2 | T3 | T4>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2, T3>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>, T3 | PromiseLike<T3>]): Promise<T1 | T2 | T3>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T1, T2>(values: [T1 | PromiseLike<T1>, T2 | PromiseLike<T2>]): Promise<T1 | T2>;
-
-    /**
-     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
-     * or rejected.
-     * @param values An array of Promises.
-     * @returns A new Promise.
-     */
-    race<T>(values: (T | PromiseLike<T>)[]): Promise<T>;
+    // see: lib.es2015.iterable.d.ts
+    // race<T>(values: Iterable<T>): Promise<T extends PromiseLike<infer U> ? U : T>;
 
     /**
      * Creates a new rejected promise for the provided reason.
@@ -8301,16 +8995,16 @@ interface PromiseConstructor {
 declare var Promise: PromiseConstructor;
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8330,15 +9024,23 @@ interface SymbolConstructor {
     readonly iterator: symbol;
 }
 
-interface IteratorResult<T> {
-    done: boolean;
-    value: T;
+interface IteratorYieldResult<TYield> {
+    done?: false;
+    value: TYield;
 }
 
-interface Iterator<T> {
-    next(value?: any): IteratorResult<T>;
-    return?(value?: any): IteratorResult<T>;
-    throw?(e?: any): IteratorResult<T>;
+interface IteratorReturnResult<TReturn> {
+    done: true;
+    value: TReturn;
+}
+
+type IteratorResult<T, TReturn = any> = IteratorYieldResult<T> | IteratorReturnResult<TReturn>;
+
+interface Iterator<T, TReturn = any, TNext = undefined> {
+    // NOTE: 'next' is defined using a tuple to ensure we report the correct assignability errors in all places.
+    next(...args: [] | [TNext]): IteratorResult<T, TReturn>;
+    return?(value?: TReturn): IteratorResult<T, TReturn>;
+    throw?(e?: any): IteratorResult<T, TReturn>;
 }
 
 interface Iterable<T> {
@@ -8451,7 +9153,7 @@ interface ReadonlyMap<K, V> {
 }
 
 interface MapConstructor {
-    new <K, V>(iterable: Iterable<[K, V]>): Map<K, V>;
+    new <K, V>(iterable: Iterable<readonly [K, V]>): Map<K, V>;
 }
 
 interface WeakMap<K extends object, V> { }
@@ -8499,7 +9201,7 @@ interface ReadonlySet<T> {
 }
 
 interface SetConstructor {
-    new <T>(iterable: Iterable<T>): Set<T>;
+    new <T>(iterable?: Iterable<T> | null): Set<T>;
 }
 
 interface WeakSet<T extends object> { }
@@ -8514,15 +9216,23 @@ interface PromiseConstructor {
     /**
      * Creates a Promise that is resolved with an array of results when all of the provided Promises
      * resolve, or rejected when any Promise is rejected.
-     * @param values An array of Promises.
+     * @param values An iterable of Promises.
      * @returns A new Promise.
      */
-    all<TAll>(values: Iterable<TAll | PromiseLike<TAll>>): Promise<TAll[]>;
+    all<T>(values: Iterable<T | PromiseLike<T>>): Promise<T[]>;
 
     /**
      * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
      * or rejected.
-     * @param values An array of Promises.
+     * @param values An iterable of Promises.
+     * @returns A new Promise.
+     */
+    race<T>(values: Iterable<T>): Promise<T extends PromiseLike<infer U> ? U : T>;
+
+    /**
+     * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
+     * or rejected.
+     * @param values An iterable of Promises.
      * @returns A new Promise.
      */
     race<T>(values: Iterable<T | PromiseLike<T>>): Promise<T>;
@@ -8795,16 +9505,16 @@ interface Float64ArrayConstructor {
 }
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8838,16 +9548,16 @@ interface ProxyConstructor {
 declare var Proxy: ProxyConstructor;
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8874,16 +9584,16 @@ declare namespace Reflect {
 }
 
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -8922,16 +9632,16 @@ interface SymbolConstructor {
 
 declare var Symbol: SymbolConstructor;
 /*! *****************************************************************************
-Copyright (c) Microsoft Corporation. All rights reserved. 
+Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
-License at http://www.apache.org/licenses/LICENSE-2.0  
- 
+License at http://www.apache.org/licenses/LICENSE-2.0
+
 THIS CODE IS PROVIDED ON AN *AS IS* BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, EITHER EXPRESS OR IMPLIED, INCLUDING WITHOUT LIMITATION ANY IMPLIED
-WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE, 
-MERCHANTABLITY OR NON-INFRINGEMENT. 
- 
+WARRANTIES OR CONDITIONS OF TITLE, FITNESS FOR A PARTICULAR PURPOSE,
+MERCHANTABLITY OR NON-INFRINGEMENT.
+
 See the Apache Version 2.0 License for specific language governing permissions
 and limitations under the License.
 ***************************************************************************** */
@@ -9150,7 +9860,8 @@ interface RegExpConstructor {
 
 interface String {
     /**
-     * Matches a string an object that supports being matched against, and returns an array containing the results of that search.
+     * Matches a string or an object that supports being matched against, and returns an array
+     * containing the results of that search, or null if no matches are found.
      * @param matcher An object that supports being matched against.
      */
     match(matcher: { [Symbol.match](string: string): RegExpMatchArray | null; }): RegExpMatchArray | null;
@@ -9196,7 +9907,7 @@ interface Int8Array {
 }
 
 interface Uint8Array {
-    readonly [Symbol.toStringTag]: "UInt8Array";
+    readonly [Symbol.toStringTag]: "Uint8Array";
 }
 
 interface Uint8ClampedArray {
@@ -9239,6 +9950,7 @@ interface SetConstructor {
 interface ArrayBufferConstructor {
     readonly [Symbol.species]: ArrayBufferConstructor;
 }
+
   `)
 
   /* global prettier, plugins */
