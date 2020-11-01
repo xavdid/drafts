@@ -7,7 +7,7 @@ require.config({
 require([
   'vs/editor/editor.main',
   'prettier/standalone',
-  'prettier/parser-babylon'
+  'prettier/parser-babel'
 ], function(monaco, prettier, ...plugins) {
   monaco.languages.typescript.javascriptDefaults.addExtraLib(`
 <%= typings %>
