@@ -7,7 +7,7 @@ require.config({
 require([
   'vs/editor/editor.main',
   'prettier/standalone',
-  'prettier/parser-babylon'
+  'prettier/parser-babel'
 ], function(monaco, prettier, ...plugins) {
   monaco.languages.typescript.javascriptDefaults.addExtraLib(`
 /**
@@ -868,6 +868,11 @@ declare class Draft {
     readonly lines: [string]
 
     /**
+     * Return the a trimmed display version of the "bocy" of the draft (content after first line), similar to what is displayed as a preview in the draft list._
+     */
+    bodyPreview(maxLength: number): string
+
+    /**
      * The preferred language grammar (syntax) to use for the draft. Can be any valid installed language grammar.
      */
     languageGrammar:
@@ -893,7 +898,7 @@ declare class Draft {
      * Array of string tag names assigned.
      * @category Tag
      */
-    readonly Tag: string[]
+    readonly tags: string[]
 
     /**
      * Is the draft current in the archive. If \`false\`, the draft is in the inbox.
@@ -3620,7 +3625,11 @@ declare class Workspace {
      * Set sort order for inbox.
      * @category Sort
      */
-    setInboxSort(sortBy: sortBy, sortDescending: boolean): void
+    setInboxSort(
+        sortBy: sortBy, 
+        sortDescending: boolean,
+        sortFlaggedToTop: boolean
+        ): void
 
     /**
      * Query for a list of drafts contained in the workspace.
@@ -3633,8 +3642,7 @@ declare class Workspace {
      */
     setFlaggedSort(
         sortBy: sortBy,
-        sortDescending: boolean,
-        sortFlaggedToTop: boolean
+        sortDescending: boolean
     ): void
 
     /**
